@@ -24,12 +24,17 @@ try{
    });
    if(width<=430)assert.ok(sizes.extent>sizes.client+20,JSON.stringify(sizes));assert.ok(sizes.orderExtent<=sizes.order+1,JSON.stringify(sizes));assert.ok(sizes.contentExtent<=sizes.content+1,JSON.stringify(sizes));assert.equal(sizes.nested,1);assert.equal(sizes.font,'12px');for(const control of sizes.controls)assert.equal(control.height,32,JSON.stringify(control));for(const w of sizes.items)assert.ok(Math.abs(w-72)<1,String(w));
    const scroll=root.locator('#orders>.scroll');
-   // Viewport changes and touch scrolling settle asynchronously on CI Chrome.
-   // Reapply the end position until every shared table is visibly inside the scroller.
-   await page.waitForFunction(n=>{n.scrollLeft=n.scrollWidth;const edge=n.getBoundingClientRect().right;return [...n.querySelectorAll('table')].every(t=>t.getBoundingClientRect().right<=edge+1);},await scroll.elementHandle());
-   if(sizes.extent>sizes.client+20)assert.ok(await scroll.evaluate(n=>n.scrollLeft>20));
+   // Capture the end position and all table bounds together: CI Chrome may
+   // adjust scrolling again between separate evaluations after a viewport change.
+   const end=await page.waitForFunction(n=>{
+    n.scrollLeft=n.scrollWidth;
+    const bounds={edge:n.getBoundingClientRect().right,children:[...n.querySelectorAll('table')].map(t=>t.getBoundingClientRect().right),left:n.scrollLeft};
+    return bounds.children.every(edge=>edge<=bounds.edge+1)?bounds:false;
+   },await scroll.elementHandle());
+   const right=await end.jsonValue();await end.dispose();
+   if(sizes.extent>sizes.client+20)assert.ok(right.left>20);
    // The last operation column and detail tables share this same scroll layer.
-   const right=await scroll.evaluate(n=>({edge:n.getBoundingClientRect().right,children:[...n.querySelectorAll('table')].map(t=>t.getBoundingClientRect().right)}));for(const edge of right.children)assert.ok(edge<=right.edge+1,JSON.stringify({width,height,language,right,edge}));
+   for(const edge of right.children)assert.ok(edge<=right.edge+1,JSON.stringify({width,height,language,right,edge}));
    await scroll.evaluate(n=>n.scrollLeft=0);
   }
   checks.push(`${language}: 320/360/390/430 portrait and touch landscape keep all order content in one bounded horizontal scroller and retain 72px frozen item columns`);
