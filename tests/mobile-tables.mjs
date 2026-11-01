@@ -23,7 +23,11 @@ try{
     return {order:orders.clientWidth,orderExtent:orders.scrollWidth,client:scroll.clientWidth,extent:scroll.scrollWidth,content:content.clientWidth,contentExtent:content.scrollWidth,nested:orders.querySelectorAll('.scroll').length,font:getComputedStyle(r.querySelector('table')).fontSize,controls:[...r.querySelectorAll('button,input,select')].map(n=>({height:n.getBoundingClientRect().height,id:n.id||n.dataset.action||n.tagName})).filter(n=>n.height>0),items:[...r.querySelectorAll('.frozen-table th:first-child')].map(n=>n.getBoundingClientRect().width)};
    });
    if(width<=430)assert.ok(sizes.extent>sizes.client+20,JSON.stringify(sizes));assert.ok(sizes.orderExtent<=sizes.order+1,JSON.stringify(sizes));assert.ok(sizes.contentExtent<=sizes.content+1,JSON.stringify(sizes));assert.equal(sizes.nested,1);assert.equal(sizes.font,'12px');for(const control of sizes.controls)assert.equal(control.height,32,JSON.stringify(control));for(const w of sizes.items)assert.ok(Math.abs(w-72)<1,String(w));
-   const scroll=root.locator('#orders>.scroll');await scroll.evaluate(n=>n.scrollLeft=n.scrollWidth);if(sizes.extent>sizes.client+20)assert.ok(await scroll.evaluate(n=>n.scrollLeft>20));
+   const scroll=root.locator('#orders>.scroll');
+   // Viewport changes and touch scrolling settle asynchronously on CI Chrome.
+   // Reapply the end position until every shared table is visibly inside the scroller.
+   await page.waitForFunction(n=>{n.scrollLeft=n.scrollWidth;const edge=n.getBoundingClientRect().right;return [...n.querySelectorAll('table')].every(t=>t.getBoundingClientRect().right<=edge+1);},await scroll.elementHandle());
+   if(sizes.extent>sizes.client+20)assert.ok(await scroll.evaluate(n=>n.scrollLeft>20));
    // The last operation column and detail tables share this same scroll layer.
    const right=await scroll.evaluate(n=>({edge:n.getBoundingClientRect().right,children:[...n.querySelectorAll('table')].map(t=>t.getBoundingClientRect().right)}));for(const edge of right.children)assert.ok(edge<=right.edge+1,JSON.stringify({width,height,language,right,edge}));
    await scroll.evaluate(n=>n.scrollLeft=0);
