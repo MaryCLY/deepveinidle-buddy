@@ -1,6 +1,6 @@
 # 当前状态
 
-版本：**0.4.6**。计算基线：**1.0.1204**。发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准；历史变更见[更新说明](../CHANGELOG.md)。
+版本：**0.4.7**。计算基线：**1.0.1204**。发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准；历史变更见[更新说明](../CHANGELOG.md)。
 
 ## 功能范围
 
@@ -14,7 +14,7 @@
 
 ## 验证与边界
 
-本次调整：新增库存材料选项，制造按一次执行、收藏按目标取整次数检查仓库与背包，库存未知明确提示；version=2新增可选inventoryOnly字段，缺失默认关闭，非法或冲突值保护存档。执行计划的“删除所有计划”移至“自动移除已完成”右侧；桌面助手窗口层级保持9，移动端恢复为31。删除仍需确认，空计划时禁用。移动验证夹具的聊天按钮归入游戏源码对应的.m-shell层叠上下文，避免根级按钮错误遮挡助手。近期调整：修复少量内容时的间距拉伸；移除底部游戏版本和订单导入导出；订单详情按名称／批量次数、三项费用分为两行；制造次数框支持Tab／Shift+Tab逐行填写。具体交互规则见[面板设计](panel.md)。保留订单复制、原存档格式及角色／行情只读同步。
+本次调整：采集收藏自动展示全部采集方案，同来源相同期望执行次数合并，精通点和效率计入各品质贡献。移除品质筛选及主表稀有度、当前→目标；点击整行或按Enter／空格展开各品质进度、预计增加和精通点，执行按钮独立预填。保留其他筛选、单位和期望次数精度，旧品质筛选存档保留但不参与采集筛选。时间说明为“时间按直接丢弃采集物估算。”，中英文同步。具体规则见[面板设计](panel.md)。
 
 完整发布门禁包含锁定依赖安装、单元测试、确定性提取与来源校验、构建及全部隔离浏览器场景。最新本地结果见.test-artifacts/release-task/summary.json与对应日志，线上结果见Actions及Release；本地诊断不提交。
 

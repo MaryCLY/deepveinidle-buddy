@@ -120,3 +120,34 @@ export function collectionRows(state){
   return routes.flatMap(job=>(future.length?future:[undefined]).map(goal=>estimateCollection(state,id,job,players,goal)));
  });
 }
+
+// Each horizon is one gathering action stream shared by every output rarity.
+export function gatheringCollectionRows(state,rows=collectionRows(state),players=collectionPlayers(state)){
+ const jobs=new Map(),seen=new Set(),result=[];
+ for(const row of rows){
+  if(row.status!=='ok'||!gatheringSkills.includes(row.skill))continue;
+  const key=`${row.jobId}:${row.attempts}`;
+  if(seen.has(key))continue;
+  seen.add(key);
+  let source=jobs.get(row.jobId);
+  if(!source){
+   const job=game.recipes.find(job=>job.id===row.jobId),base=job.output.itemId;
+   source={base,qualities:game.itemSupportsRarity(base)?workQualities(players.gather,job,players.tick,players.worldRarity):[1]};
+   jobs.set(row.jobId,source);
+  }
+  const details=source.qualities.map((quality,tier)=>{
+   const id=game.withRarity(source.base,tier),target=collectionTarget(state,id);
+   let quantity=row.quantity*(quality/row.quality);
+   if(!Number.isFinite(quantity)||quantity<0||quantity>Number.MAX_SAFE_INTEGER)throw Error('quantityOverflow');
+   // Undo only floating-point roundoff at integral collection boundaries.
+   const nearest=Math.round(quantity);
+   if(Math.abs(quantity-nearest)<=Number.EPSILON*8*Math.max(1,quantity))quantity=nearest;
+   if(target.current+quantity>Number.MAX_SAFE_INTEGER)throw Error('quantityOverflow');
+   return {id,tier,...target,quantity,points:pointsForProduction(id,target.current,quantity)};
+  });
+  const points=details.reduce((sum,detail)=>sum+detail.points,0);
+  if(!Number.isFinite(points)||points<=0||points>Number.MAX_SAFE_INTEGER)throw Error('quantityOverflow');
+  result.push({...row,points,secondsPerPoint:row.seconds/points,details});
+ }
+ return result;
+}

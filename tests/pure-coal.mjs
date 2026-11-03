@@ -15,9 +15,9 @@ try{
  assert.ok((await rows.evaluateAll(els=>els.map(el=>el.dataset.itemId))).every(id=>id==='5'));
  assert.equal(await root.locator('[data-action="add-collection"],[data-action="add-all"],#orders,#execution-plan').count(),0);
  checks.push('pure coal candidates identify the common-only source without gathering order controls');
- await root.locator('#tier').selectOption('1');await page.waitForTimeout(300);assert.equal(await rows.count(),0);
- await root.locator('#tier').selectOption('0');await toggleGameLanguage(page);await root.locator('#search').fill('Pure coal');await root.locator('#search').press('Tab');await page.waitForTimeout(300);
+ assert.equal(await root.locator('#tier').count(),0);
+ await rows.first().click();assert.equal(await root.locator('.gather-details tbody tr').count(),5);assert.deepEqual(await root.locator('.gather-details tbody tr').evaluateAll(rows=>rows.slice(1).map(row=>row.cells[2].textContent)),['0','0','0','0']);await rows.first().click();await toggleGameLanguage(page);await root.locator('#search').fill('Pure coal');await root.locator('#search').press('Tab');await page.waitForTimeout(300);
  assert.ok(await rows.count()>0);assert.ok((await rows.allTextContents()).every(text=>text.includes('Pure coal')));
- checks.push('rare coal excludes the pure route and English labels remain searchable');
+ checks.push('pure route shows zero rare output and English labels remain searchable');
  console.log(JSON.stringify({passed:checks.length,checks},null,2));
 }finally{await browser.close();}

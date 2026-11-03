@@ -6,7 +6,7 @@ import {userDefaults} from '../src/workspace.js';
 import {gameSnapshot} from './game-snapshot.mjs';
 await fs.mkdir('.test-artifacts/assistant-modes',{recursive:true});
 await build({stdin:{contents:`
- import {collectionRows} from './src/engine/collection-model.js';
+ import {collectionRows,gatheringCollectionRows} from './src/engine/collection-model.js';
  import {mountPanel} from './src/app.js';import css from './src/theme.css';import {createGamePrefill} from './src/game-prefill.js';
  window.mountModes=async(raw,snapshot)=>{
   window.panel?.dispose();document.querySelector('#deepveinidle-buddy')?.remove();window.raw=raw;window.writes=[];window.hints=[];window.sequence=0;
@@ -19,6 +19,7 @@ await build({stdin:{contents:`
    market:async()=>{throw Error('fixture-market');}
   },gameIntegration:integration,onPrefillFeedback:value=>window.hints.push(value)});
   window.gatherAttempts=key=>collectionRows(window.panel.getWorkspace().character).find(row=>[row.id,row.jobId,row.target].join(':')===key).attempts;
+  window.gatherSchemes=()=>gatheringCollectionRows(window.panel.getWorkspace().character);
   window.expectedGather=key=>Math.ceil(window.gatherAttempts(key));
   window.sendSnapshot=value=>window.panel.receive({role:'42',connection:1,sequence:++window.sequence,status:'live',source:'client',snapshot:value});
   window.sendSnapshot(snapshot);window.panel.open();
@@ -61,7 +62,7 @@ try{
  await root.locator('#search').fill('');await root.locator('#search').press('Tab');await root.locator('[data-action="prefill-gather"]').first().waitFor();
  checks.push('sparse gathering content retains section and control spacing when the window grows');
  const ordersBefore=await page.evaluate(()=>JSON.stringify([window.panel.getWorkspace().orders,window.panel.getWorkspace().collectionOrder]));
- assert.deepEqual((await root.locator('#recipe-candidates th').allTextContents()).map(value=>value.replace(/[▲▼]/g,'').trim()),['物品','稀有度','当前→目标','精通点','时间','秒/点','执行次数','操作']);
+ assert.deepEqual((await root.locator('#recipe-candidates th').allTextContents()).map(value=>value.replace(/[▲▼]/g,'').trim()),['物品','精通点','时间','秒/点','执行次数','操作']);
  assert.equal(await root.locator('#recipe-candidates tbody tr').first().locator('td').nth(2).locator('small').count(),0);
  assert.equal(await root.locator('[data-sort="coins"],[data-sort="cost"]').count(),0);
  assert.equal(await root.locator('[data-sort="time"]').evaluate(node=>node.parentElement.getAttribute('aria-sort')),'ascending');
@@ -69,6 +70,27 @@ try{
  assert.equal(await page.evaluate(()=>window.__routes.pending.jobId),Number(key.split(':')[1]));assert.equal(await page.evaluate(()=>window.__routes.amount),await page.evaluate(key=>window.expectedGather(key),key));const attempts=await execute.locator('xpath=ancestor::tr').locator('[data-collection-attempts]').textContent();assert.equal(attempts,await page.evaluate(key=>window.gatherAttempts(key).toLocaleString('zh-CN',{maximumFractionDigits:2}),key));
  assert.equal(await page.evaluate(()=>JSON.stringify([window.panel.getWorkspace().orders,window.panel.getWorkspace().collectionOrder])),ordersBefore);assert.deepEqual(await page.evaluate(()=>window.__commands),[]);
  checks.push('gathering executes directly from a candidate with integer draft counts, no order mutation and zero commands');
+ assert.equal(await root.locator('#tier').count(),0);
+ assert.equal(await root.locator('button[data-action="toggle-gather"]').count(),0);assert.equal(await root.locator('[data-action="toggle-gather"]').first().getAttribute('aria-expanded'),'false');
+ const toggle=root.locator('tr[data-action="toggle-gather"]').first(),scheme=await page.evaluate(key=>window.gatherSchemes().find(row=>[row.id,row.jobId,row.target].join(':')===key),key);
+ const mainRow=execute.locator('xpath=ancestor::tr');assert.equal(await mainRow.locator('td').nth(1).textContent(),scheme.points.toLocaleString('zh-CN',{maximumFractionDigits:0}));
+ await toggle.locator('td').nth(2).click();assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+ const detail=root.locator('.gather-details');assert.deepEqual(await detail.locator('th').allTextContents(),['稀有度','当前→目标','预计增加','精通点']);assert.equal(await detail.locator('tbody tr').count(),scheme.details.length);
+ assert.equal(await detail.locator('td[colspan]').getAttribute('colspan'),'6');
+ const points=await detail.locator('tbody tr').evaluateAll(rows=>rows.reduce((sum,row)=>sum+Number(row.cells[3].textContent.replaceAll(',','')),0));assert.equal(points,scheme.points);
+ await detail.locator('tbody td').first().click();assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+ const pagination=await root.locator('.pagination>small').textContent();await toggle.locator('.item-name').click();assert.equal(await root.locator('.gather-details').count(),0);assert.equal(await root.locator('.pagination>small').textContent(),pagination);
+ await toggle.focus();await toggle.press('Enter');assert.equal(await toggle.getAttribute('aria-expanded'),'true');await toggle.press(' ');assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+ checks.push('gathering main columns show combined points, no quality selector, and expandable rarity contributions without consuming pagination');
+ checks.push('gathering expands from the row without a button, supports Enter/Space, and keeps execute/detail clicks independent');
+ await page.setViewportSize({width:390,height:844});await toggle.click();
+ assert.equal(await mainRow.locator('td').nth(1).evaluate(el=>getComputedStyle(el).position),'static');
+ assert.equal(await detail.locator('tbody td').first().evaluate(el=>getComputedStyle(el).position),'static');
+ await root.locator('#recipe-candidates').screenshot({path:'.test-artifacts/assistant-modes/mobile-gathering.png'});
+ await toggleGameLanguage(page);assert.deepEqual(await detail.locator('th').allTextContents(),['Rarity','Current → target','Expected increase','Points']);await toggleGameLanguage(page);
+ await toggle.click();await page.setViewportSize({width:1440,height:1080});
+ checks.push('gathering details translate and keep only the main item column sticky on narrow screens');
+
  // Delay a second prefill after the game options are intentionally folded.
  await page.evaluate(()=>{document.querySelector('[data-opt-line]').setAttribute('aria-expanded','false');document.querySelector('[data-opt-sheet]').hidden=true;window.__blockOptionOpen=true;window.__wait=()=>new Promise(resolve=>window.releaseWait=resolve);});
  await execute.click();await page.waitForFunction(()=>!!window.releaseWait);await select('craft');await select('collection-gather');await page.evaluate(()=>{window.__wait=null;window.__blockOptionOpen=false;window.releaseWait();});
@@ -98,10 +120,24 @@ try{
  checks.push('clear collection plans confirms, includes filtered targets, saves the empty plan and preserves manufacturing orders and settings');
  await mount(raw);await root.locator('.titlebar h1').click({button:'right'});await root.getByRole('menuitemcheckbox').click();assert.equal(await row.locator('[data-action="target-up"]').count(),1);assert.equal(await row.locator('[data-action="prefill-action"]').count(),0);
  await row.locator('[data-action="target-down"]').click();assert.match(await row.textContent(),/9 → 10/);await row.locator('[data-action="target-down"]').click();assert.equal(await row.locator('[data-action="target-down"]').isDisabled(),true);
- await select('collection-gather');assert.equal(await root.locator('[data-action="prefill-gather"]').count(),0);assert.equal(await root.locator('#recipe-candidates th').count(),7);
+ await select('collection-gather');assert.equal(await root.locator('[data-action="prefill-gather"]').count(),0);assert.equal(await root.locator('#recipe-candidates th').count(),5);
  checks.push('turning debug off hides prefill only, leaves target operations and disables the lower boundary');
  await select('collection-craft');await toggleGameLanguage(page);assert.ok((await root.locator('#execution-actions').textContent()).includes('Current → target'));await page.setViewportSize({width:390,height:844});await page.evaluate(async()=>{const {installMobileFixture}=await import('/tests/mobile-fixture.js');installMobileFixture();});await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').hasAttribute('data-mobile'));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await root.locator('#execution-actions').screenshot({path:'.test-artifacts/assistant-modes/mobile-execution.png'});await page.screenshot({path:'.test-artifacts/assistant-modes/mobile.png'});
  checks.push('translated editable plans fit the mobile layout with internal horizontal scrolling');
+ const legacy=structuredClone(raw);legacy.selectedMode='collectionGather';legacy.filters.collectionGather.tier='4';legacy.filters.collectionGather.sort='rarity';legacy.filters.collectionGather.sortDirection='desc';
+ await toggleGameLanguage(page);await mount(legacy);assert.equal(await root.locator('#tier').count(),0);
+ const total=async()=>Number((await root.locator('.pagination>small').textContent()).split(' ')[0]);
+ assert.equal(await total(),await page.evaluate(()=>window.gatherSchemes().length));
+ assert.equal(await page.evaluate(()=>window.raw.filters.collectionGather.tier),'4');assert.equal(await page.evaluate(()=>window.raw.filters.collectionGather.sort),'rarity');assert.equal(await root.locator('[data-sort="time"]').evaluate(el=>el.parentElement.getAttribute('aria-sort')),'ascending');
+ const setThreshold=async(id,value)=>{await root.locator(id).fill(value);await root.locator(id).press('Tab');};
+ await setThreshold('#min-points','100');await setThreshold('#max-hours-per-100-points','1.5');
+ await page.waitForFunction(()=>window.raw.filters.collectionGather.minPoints==='100'&&window.raw.filters.collectionGather.maxSecondsPerPoint==='54');
+ const filteredCount=await page.evaluate(()=>window.gatherSchemes().filter(row=>row.points>=100&&row.secondsPerPoint<=54).length);
+ await page.waitForFunction(count=>Number(document.querySelector('#deepveinidle-buddy').shadowRoot.querySelector('.pagination>small').textContent.split(' ')[0])===count,filteredCount);
+ assert.equal(await total(),await page.evaluate(()=>window.gatherSchemes().filter(row=>row.points>=100&&row.secondsPerPoint<=54).length));
+ assert.deepEqual(await root.locator('.threshold-filters label').evaluateAll(els=>els.map(el=>el.firstChild.textContent)),['精通点 ≥','小时/100点 ≤','金币/点(M/100) ≤']);
+ await page.waitForFunction(()=>window.raw.filters.collectionGather.maxSecondsPerPoint==='54');assert.equal(await page.evaluate(()=>window.raw.filters.collectionGather.tier),'4');
+ checks.push('legacy quality values and removed rarity sorting remain protected on read, while aggregate points and existing hour units drive filtering');
  assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:checks.length,checks},null,2));
 }finally{await browser.close();}

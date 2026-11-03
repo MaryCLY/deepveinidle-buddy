@@ -50,7 +50,7 @@ export function validateOrders(raw){
  });
 }
 export const filterDefaults=(mode='craft')=>({skill:'all',tier:'all',query:'',route:'all',sort:mode==='collection'?'cost':'item',sortDirection:'asc',page:1,minPoints:'',maxSecondsPerPoint:'',maxCost:''});
-export function userDefaults(){const order=createOrder();return {version:2,revision:0,selectedMode:'craft',orders:[order],currentOrderId:order.id,collectionOrder:createCollectionOrder(),materialPriceMode:'ask',productPriceMode:'bid',excludeInsufficientAsks:false,inventoryOnly:false,autoRemove:false,filters:{craft:filterDefaults(),collection:filterDefaults('collection'),collectionGather:filterDefaults('collection')}};}
+export function userDefaults(){const order=createOrder();return {version:2,revision:0,selectedMode:'craft',orders:[order],currentOrderId:order.id,collectionOrder:createCollectionOrder(),materialPriceMode:'ask',productPriceMode:'bid',excludeInsufficientAsks:false,inventoryOnly:false,autoRemove:false,filters:{craft:filterDefaults(),collection:filterDefaults('collection'),collectionGather:{...filterDefaults('collection'),sort:'time'}}};}
 export function defaults(){return applyUserWorkspace({character:collectionDefaults(),prices:priceDefaults()},userDefaults());}
 // Runtime composition for the calculation engine; never persist this object.
 export function validateWorkspace(raw){

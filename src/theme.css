@@ -77,15 +77,15 @@ th,td { text-align:left; padding:4px 5px; border-bottom:1px solid #73553766; ver
 th { background:#1d1209; color:#d7bd8d; font-weight:700; }
 td small { display:block; }
 td small.route-label { display:inline; margin-left:6px; }
-/* Only the three planning tables freeze their item and rarity columns. */
+/* Planning tables freeze identity columns; gathering keeps only the item sticky. */
 .frozen-table { border-collapse:separate; border-spacing:0; }
 #recipe-candidates { --frozen-first-width:var(--recipes-item-width,100px); }
 #purchase-materials { --frozen-first-width:var(--procurement-item-width,100px); }
 #execution-actions { --frozen-first-width:var(--actions-item-width,100px); }
-.frozen-table :is(th,td):nth-child(-n+2):not([colspan]) { position:sticky; z-index:1; background:var(--frozen-row-bg,#25170d); }
-.frozen-table :is(th,td):first-child:not([colspan]) { left:0; }
-.frozen-table :is(th,td):nth-child(2):not([colspan]) { left:var(--frozen-first-width); border-right:1px solid #80613d; }
-.frozen-table thead th:nth-child(-n+2) { z-index:2; background:#1d1209; }
+.frozen-table> :is(thead,tbody)>tr> :is(th,td):nth-child(-n+2):not([colspan]) { position:sticky; z-index:1; background:var(--frozen-row-bg,#25170d); }
+.frozen-table> :is(thead,tbody)>tr> :is(th,td):first-child:not([colspan]) { left:0; }
+.frozen-table> :is(thead,tbody)>tr> :is(th,td):nth-child(2):not([colspan]) { left:var(--frozen-first-width); border-right:1px solid #80613d; }
+.frozen-table>thead>tr>th:nth-child(-n+2) { z-index:2; background:#1d1209; }
 .frozen-table tbody tr:hover { --frozen-row-bg:#38291a; }
 tbody tr:hover { background:#b0803520; }
 .text-cell { width:auto; min-width:100px; max-width:240px; white-space:normal; overflow-wrap:break-word; }
@@ -172,7 +172,7 @@ details[open]>summary { margin-bottom:10px; }
 :host([data-mobile]) .sort-header { padding:0; }
 :host([data-mobile]) .content { display:flex; flex-direction:column; padding:6px; gap:8px; }
 :host([data-mobile]) .section { flex-shrink:0; min-width:0; padding:6px; gap:8px; }
-:host([data-mobile]) .frozen-table :is(th,td):first-child:not([colspan]) { width:72px; min-width:72px; max-width:72px; }
+:host([data-mobile]) .frozen-table> :is(thead,tbody)>tr> :is(th,td):first-child:not([colspan]) { width:72px; min-width:72px; max-width:72px; }
 :host([data-mobile]) .item-name { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; }
 :host([data-mobile]) .item-name:focus { display:block; overflow:visible; outline:1px solid var(--edge); }
 :host([data-mobile]) .materials-cell { min-width:120px; max-width:160px; }
@@ -181,3 +181,11 @@ details[open]>summary { margin-bottom:10px; }
 :host([data-mobile]) .primary-filters { flex-wrap:wrap; }
 :host([data-mobile]) .primary-filters label:last-child { flex:1 1 130px; }
 :host([data-mobile]) input[type=checkbox] { width:32px; min-width:32px; height:32px; margin:0; }
+
+/* Gathering has one identity column; detail tables do not freeze columns. */
+.gathering-table> :is(thead,tbody)>tr> :is(th,td):nth-child(2):not([colspan]) { position:static; border-right:0; }
+.gathering-table> :is(thead,tbody)>tr> :is(th,td):first-child:not([colspan]) { border-right:1px solid #80613d; }
+.gather-details>td { padding:6px 10px; background:#1a100955; }
+
+.gathering-table>tbody>tr[data-action="toggle-gather"] { cursor:pointer; }
+.gathering-table>tbody>tr[data-action="toggle-gather"]:focus-visible { outline:2px solid var(--edge); outline-offset:-2px; }

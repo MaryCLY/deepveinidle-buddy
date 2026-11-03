@@ -121,8 +121,11 @@ let page;try{
  });assert.deepEqual(unregistered,{fetches:0,quantity:'3'});checks.push('production adapter fills drafts without registered game bundle metadata or resource verification requests');
  assert.equal(await root.locator('.content > [role="alert"]').textContent(),'');checks.push('purchase and execute feedback is kept outside panel content');
  // Exercise real panel updates on a source-clock hot transition, not a local-clock forecast.
- await root.locator('[data-action="mode-collection-gather"]').click();await root.locator('#skill').selectOption('mining');await root.locator('#tier').selectOption('4');await root.locator('#search').fill('铜矿');await root.locator('#search').press('Tab');
- const hotRow=root.locator('[data-key="4001:1:1"]').locator('xpath=ancestor::tr');await hotRow.waitFor();const beforeHot=await hotRow.locator('[data-collection-attempts]').textContent();await page.waitForTimeout(1200);
+ await root.locator('[data-action="mode-collection-gather"]').click();await root.locator('#skill').selectOption('mining');assert.equal(await root.locator('#tier').count(),0);await root.locator('#search').fill('铜矿');await root.locator('#search').press('Tab');
+ await root.locator('[data-table="recipes"][data-column="item"]').click();
+ const hotRow=root.locator('[data-action="prefill-gather"][data-key="4001:1:1"]').locator('xpath=ancestor::tr');
+ while(!await hotRow.count()){assert.equal(await root.locator('[data-action="next"]').isDisabled(),false);await root.locator('[data-action="next"]').click();}
+ await hotRow.waitFor();const beforeHot=await hotRow.locator('[data-collection-attempts]').textContent();await page.waitForTimeout(1200);
  const beforeHotWrites=await page.evaluate(()=>window.__writes.length);await page.evaluate(()=>window.deepvein.session.tick=42978000);
  await page.waitForFunction(()=>window.__panel.getWorkspace().character.worldTick===42978000);await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').shadowRoot.querySelector('[data-key="4001:1:1"]').closest('tr').querySelector('[data-collection-attempts]').textContent==='120,000');
  assert.notEqual(beforeHot,'120,000');await page.waitForTimeout(1100);assert.equal(await page.evaluate(()=>window.__writes.length),beforeHotWrites);checks.push('source-clock rarity hot transition refreshes collection results without a clock-only GM write');
