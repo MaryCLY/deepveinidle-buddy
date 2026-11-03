@@ -5,7 +5,7 @@ import {defaults,userDefaults,validateUserWorkspace,workspaceForStorage,applyUse
 test('user persistence roundtrips without character, clock, inventory or market validation',()=>{
  const runtime=defaults();runtime.character.buyMode='bid';runtime.character.config=null;runtime.character.bank='invalid';runtime.prices=null;
  const stored=workspaceForStorage(runtime);assert.equal(stored.materialPriceMode,'bid');assert.equal(stored.version,2);
- assert.deepEqual(Object.keys(stored).sort(),['version','revision','selectedMode','orders','currentOrderId','collectionOrder','materialPriceMode','productPriceMode','excludeInsufficientAsks','autoRemove','filters'].sort());
+ assert.deepEqual(Object.keys(stored).sort(),['version','revision','selectedMode','orders','currentOrderId','collectionOrder','materialPriceMode','productPriceMode','excludeInsufficientAsks','inventoryOnly','autoRemove','filters'].sort());
  assert.deepEqual(validateUserWorkspace(stored),stored);
 });
 test('persisted user data excludes runtime state and requires explicit settings',()=>{
@@ -26,7 +26,7 @@ test('automatic removal reports only actual user order mutations and requires in
 
 test('required persisted user fields cannot be omitted and corrupt storage stays untouched',async()=>{
  const {createStore}=await import('../src/storage.js');
- for(const key of Object.keys(userDefaults()).filter(key=>!['collectionOrder','selectedMode'].includes(key))){
+ for(const key of Object.keys(userDefaults()).filter(key=>!['collectionOrder','selectedMode','inventoryOnly'].includes(key))){
   const raw=userDefaults();delete raw[key];const before=structuredClone(raw);let writes=0;
   const store=createStore({get:async()=>structuredClone(raw),set:async()=>writes++},'user',validateUserWorkspace);
   await assert.rejects(store.load());await assert.rejects(store.save(userDefaults()),/storageBlocked/);assert.equal(writes,0);assert.deepEqual(raw,before);
@@ -75,4 +75,31 @@ test('a missing legacy mode defaults without mutating storage; a present invalid
  const store=createStore({get:async()=>structuredClone(raw),set:async()=>writes++},'test',validateUserWorkspace);
  assert.equal((await store.load()).selectedMode,'craft');assert.deepEqual(raw,before);assert.equal(writes,0);
  for(const value of [undefined,null,'',false,'gather',{},4]){const invalid={...userDefaults(),selectedMode:value},original=structuredClone(invalid);const bad=createStore({get:async()=>structuredClone(invalid),set:async()=>writes++},'test',validateUserWorkspace);await assert.rejects(bad.load(),/invalidWorkspace/);await assert.rejects(bad.save(userDefaults()),/storageBlocked/);assert.deepEqual(invalid,original);assert.equal(writes,0);}
+});
+
+
+test('inventory preference roundtrips; legacy absence defaults off without writing',async()=>{
+ const user=userDefaults();assert.equal(user.inventoryOnly,false);user.inventoryOnly=true;
+ assert.deepEqual(workspaceForStorage(applyUserWorkspace(defaults(),user)),user);
+ const {createStore}=await import('../src/storage.js');delete user.inventoryOnly;
+ const before=structuredClone(user);let writes=0;
+ const store=createStore({get:async()=>structuredClone(user),set:async()=>writes++},'test',validateUserWorkspace);
+ assert.equal((await store.load()).inventoryOnly,false);assert.deepEqual(user,before);assert.equal(writes,0);
+ const runtime=defaults();delete runtime.inventoryOnly;assert.equal(workspaceForStorage(runtime).inventoryOnly,false);
+});
+test('invalid inventory preference protects stored data and prevents writes',async()=>{
+ const {createStore}=await import('../src/storage.js');
+ for(const value of [undefined,null,0,1,'false',{},[]]){
+  const user={...userDefaults(),inventoryOnly:value},before=structuredClone(user);let writes=0;
+  const store=createStore({get:async()=>structuredClone(user),set:async()=>writes++},'test',validateUserWorkspace);
+  await assert.rejects(store.load(),/invalidPriceMode/);await assert.rejects(store.save(userDefaults()),/storageBlocked/);
+  assert.deepEqual(user,before);assert.equal(writes,0);
+ }
+});
+
+
+test('inventory selection rejects conflicting pricing and supply preferences',()=>{
+ const user={...userDefaults(),inventoryOnly:true};
+ assert.throws(()=>validateUserWorkspace({...user,materialPriceMode:'bid'}),/invalidPriceMode/);
+ assert.throws(()=>validateUserWorkspace({...user,excludeInsufficientAsks:true}),/invalidPriceMode/);
 });

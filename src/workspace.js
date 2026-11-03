@@ -50,23 +50,26 @@ export function validateOrders(raw){
  });
 }
 export const filterDefaults=(mode='craft')=>({skill:'all',tier:'all',query:'',route:'all',sort:mode==='collection'?'cost':'item',sortDirection:'asc',page:1,minPoints:'',maxSecondsPerPoint:'',maxCost:''});
-export function userDefaults(){const order=createOrder();return {version:2,revision:0,selectedMode:'craft',orders:[order],currentOrderId:order.id,collectionOrder:createCollectionOrder(),materialPriceMode:'ask',productPriceMode:'bid',excludeInsufficientAsks:false,autoRemove:false,filters:{craft:filterDefaults(),collection:filterDefaults('collection'),collectionGather:filterDefaults('collection')}};}
+export function userDefaults(){const order=createOrder();return {version:2,revision:0,selectedMode:'craft',orders:[order],currentOrderId:order.id,collectionOrder:createCollectionOrder(),materialPriceMode:'ask',productPriceMode:'bid',excludeInsufficientAsks:false,inventoryOnly:false,autoRemove:false,filters:{craft:filterDefaults(),collection:filterDefaults('collection'),collectionGather:filterDefaults('collection')}};}
 export function defaults(){return applyUserWorkspace({character:collectionDefaults(),prices:priceDefaults()},userDefaults());}
 // Runtime composition for the calculation engine; never persist this object.
 export function validateWorkspace(raw){
- requireKeys(raw,['version','revision','orders','currentOrderId','character','prices','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
+ requireKeys(raw,['version','revision','orders','currentOrderId','character','prices','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode','inventoryOnly'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
  if(raw.version!==1)throw Error('invalidWorkspace');
- const {filters,collectionOrder,selectedMode}=workspaceForStorage(raw);
- return {...raw,filters,collectionOrder,selectedMode,character:validateCollection(raw.character),prices:normalizePriceState(raw.prices)};
+ const {filters,collectionOrder,selectedMode,inventoryOnly}=workspaceForStorage(raw);
+ return {...raw,filters,collectionOrder,selectedMode,inventoryOnly,character:validateCollection(raw.character),prices:normalizePriceState(raw.prices)};
 }
 export function validateUserWorkspace(raw){
  if(!record(raw)||raw.version!==2)throw Error('unsupportedWorkspaceVersion');
- requireKeys(raw,['version','revision','orders','currentOrderId','materialPriceMode','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
+ requireKeys(raw,['version','revision','orders','currentOrderId','materialPriceMode','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode','inventoryOnly'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
+ const inventoryOnly=Object.hasOwn(raw,'inventoryOnly')?raw.inventoryOnly:false;
+ if(typeof inventoryOnly!=='boolean')throw Error('invalidPriceMode');
  const selectedMode=Object.hasOwn(raw,'selectedMode')?raw.selectedMode:'craft';
  if(!['craft','collection','collectionGather'].includes(selectedMode))throw Error('invalidWorkspace');
  const hasGather=record(raw.filters)&&Object.hasOwn(raw.filters,'collectionGather');
  requireKeys(raw.filters,hasGather?['craft','collection','collectionGather']:['craft','collection'],'invalidFilters');
  if(!quantity(raw.revision)||typeof raw.autoRemove!=='boolean')throw Error('invalidWorkspace');
+ if(inventoryOnly&&(raw.materialPriceMode!=='ask'||raw.excludeInsufficientAsks!==false))throw Error('invalidPriceMode');
  if(typeof raw.excludeInsufficientAsks!=='boolean'||!['ask','bid'].includes(raw.productPriceMode)||!['ask','bid'].includes(raw.materialPriceMode))throw Error('invalidPriceMode');
  const orders=validateOrders(raw.orders),collectionOrder=Object.hasOwn(raw,'collectionOrder')?validateCollectionOrder(raw.collectionOrder):createCollectionOrder(),filters={};
  if(orders.some(order=>order.id===collectionOrder.id))throw Error('invalidOrders');
@@ -80,10 +83,10 @@ export function validateUserWorkspace(raw){
  // A validated legacy shared filter seeds an independent gathering preference.
  if(!hasGather)filters.collectionGather={...filters.collection};
  if(!orders.length||!orders.some(order=>order.id===raw.currentOrderId))throw Error('invalidWorkspace');
- return {version:2,revision:raw.revision,selectedMode,orders,currentOrderId:raw.currentOrderId,collectionOrder,materialPriceMode:raw.materialPriceMode,productPriceMode:raw.productPriceMode,excludeInsufficientAsks:raw.excludeInsufficientAsks,autoRemove:raw.autoRemove,filters};
+ return {version:2,revision:raw.revision,selectedMode,inventoryOnly,orders,currentOrderId:raw.currentOrderId,collectionOrder,materialPriceMode:raw.materialPriceMode,productPriceMode:raw.productPriceMode,excludeInsufficientAsks:raw.excludeInsufficientAsks,autoRemove:raw.autoRemove,filters};
 }
 export function workspaceForStorage(workspace){
- return validateUserWorkspace({version:2,revision:workspace.revision,orders:workspace.orders,currentOrderId:workspace.currentOrderId,...Object.fromEntries(['collectionOrder','selectedMode'].filter(key=>Object.hasOwn(workspace,key)).map(key=>[key,workspace[key]])),materialPriceMode:workspace.character.buyMode,productPriceMode:workspace.productPriceMode,excludeInsufficientAsks:workspace.excludeInsufficientAsks,autoRemove:workspace.autoRemove,filters:workspace.filters});
+ return validateUserWorkspace({version:2,revision:workspace.revision,orders:workspace.orders,currentOrderId:workspace.currentOrderId,...Object.fromEntries(['collectionOrder','selectedMode','inventoryOnly'].filter(key=>Object.hasOwn(workspace,key)).map(key=>[key,workspace[key]])),materialPriceMode:workspace.character.buyMode,productPriceMode:workspace.productPriceMode,excludeInsufficientAsks:workspace.excludeInsufficientAsks,autoRemove:workspace.autoRemove,filters:workspace.filters});
 }
 export function applyUserWorkspace(workspace,raw){
  const {materialPriceMode,...user}=validateUserWorkspace(raw);

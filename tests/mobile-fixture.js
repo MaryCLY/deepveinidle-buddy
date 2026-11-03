@@ -12,7 +12,8 @@ export function installMobileFixture(){
  const shell=document.createElement('div');shell.className='m-shell';shell.dataset.mtab='world';shell.innerHTML='<div class="m-top"><header class="top">Game top</header></div><main class="m-content"><section data-view="play"></section><section data-view="more" hidden></section></main>';
  const tabs=document.createElement('nav');tabs.className='m-tabs';tabs.dataset.mTabs='';tabs.innerHTML='<button data-m-tab="play">Play</button><button data-m-tab="bag">Bag</button><button data-m-tab="bank">Bank</button><button data-m-tab="market">Market</button><button data-m-tab="more">More</button>';
  const chat=document.createElement('button');chat.className='m-chat-fab';chat.dataset.mChat='';chat.textContent='Chat';
- document.body.append(shell,tabs,chat);
+ // The game chat button belongs to the shell stacking context.
+ shell.append(chat);document.body.append(shell,tabs);
  window.__mobileTabClicks=[];window.__chatClicks=0;chat.onclick=()=>window.__chatClicks++;
  for(const button of tabs.querySelectorAll('[data-m-tab]'))button.onclick=()=>{
   const next=button.dataset.mTab;window.__mobileTabClicks.push(next);
