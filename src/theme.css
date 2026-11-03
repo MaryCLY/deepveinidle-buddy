@@ -156,7 +156,7 @@ details[open]>summary { margin-bottom:10px; }
 .debug-menu button {display:block;width:100%;text-align:left;}
 .debug-menu button[aria-checked="true"]::before {content:"✓ ";}
 
-:host([data-mobile]) { z-index:9; font-size:14px; max-height:none; }
+:host([data-mobile]) { z-index:31; font-size:14px; max-height:none; }
 :host([data-mobile]) .shell { border:0; border-radius:0; }
 :host([data-mobile]) .titlebar { cursor:default; touch-action:auto; padding:0 8px; gap:5px; align-items:center; height:var(--mobile-title-height,46px); flex:0 0 var(--mobile-title-height,46px); }
 :host([data-mobile]) .title-info { -webkit-touch-callout:none; max-height:100%; overflow:auto; }
