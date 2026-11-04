@@ -33,9 +33,9 @@ test('fixed attempts use original work probability without burn adjustment and s
  assert.equal(p.entries[0].count,100);assert.equal(p.entries[0].result,undefined);
  w.orders[0].lines[0].count=7;assert.equal(evaluate(w).craftSeconds,7*(game.tickMs/1000)/chance);
 });
-test('instant upgrades and empty or completed-only orders have zero action fee',()=>{
+test('timed upgrades incur a work fee, while empty or completed-only orders do not',()=>{
  const w=setup(),job=craftingJobs.find(j=>j.upgrade);w.orders[0].fees.minute=5;
- putLine(w.orders[0],{kind:'craft',jobId:job.id,tier:0,count:3});assert.equal(evaluate(w).craftSeconds,0);assert.equal(evaluate(w).orders[0].fees.minute,0);
+ putLine(w.orders[0],{kind:'craft',jobId:job.id,tier:0,count:3});assert.equal(evaluate(w).craftSeconds,3*4.8);assert.ok(Math.abs(evaluate(w).orders[0].fees.minute-1.2)<1e-12);
  w.orders[0].lines=[];assert.equal(evaluate(w).orders[0].fees.total,0);
  putLine(w.orders[0],collection(100));w.character.counts[40]=100;assert.equal(evaluate(w).orders[0].fees.minute,0);
 });
@@ -168,6 +168,15 @@ test('selected outputs offset matching material rows once across orders without 
  assert.equal(plan.actions.find(a=>a.jobId===consumer.id).materialStatus,null);
  const before=plan.orders[1];w.orders[0].enabled=false;
  const excluded=evaluate(w);assert.deepEqual(excluded.orders[0],before);assert.equal(excluded.rows.find(r=>r.id===40).produced,0);assert.equal(excluded.rows.find(r=>r.id===40).purchase,7);
+});
+
+test('locked material cannot be offset by a planned output',()=>{
+ const w=setup();
+ putLine(w.orders[0],craft(4));
+ putLine(w.orders[0],{kind:'craft',jobId:51,tier:0,count:5});
+ w.character.bankLocked=[40];
+ const row=evaluate(w).rows.find(r=>r.id===40);
+ assert.deepEqual([row.required,row.produced,row.purchase],[10,0,10]);
 });
 
 test('surplus outputs never create negative purchases or require prices for covered rows',()=>{

@@ -191,7 +191,7 @@ export function estimateOrders(workspace,prices){
  const rows=[...materials].sort((a,b)=>a[0]-b[0]).map(([id,exact])=>{
   const required=Math.ceil(exact);if(!quantity(required))throw Error('quantityOverflow');
   const owned=state.bank===null||state.pack===null?null:add(state.bank[id]??0,state.pack[id]??0);
-  const produced=blocked?null:(products.get(id)??0);
+  const produced=blocked?null:state.bankLocked.includes(id)?0:(products.get(id)??0);
   const purchase=owned===null||produced===null?null:Math.ceil(Math.max(0,required-owned-produced));
   const quote=collectionPrice(id,prices,state.buyMode);
   if(owned===null)unknownInventory=true;if(purchase>0&&quote.price===null)missingPrices++;

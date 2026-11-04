@@ -1,7 +1,7 @@
 import {craftingSkills,craftingSlots,craftingRooms} from './engine/crafting-model.js';
 import {gatheringSkills,gatheringSlots,gatheringRooms} from './engine/gathering-model.js';
 import {readWorldBuffs} from './engine/world-buffs.js';
-export const characterFields=['lastTick','skills','equipment','brews','brewTier','brewBuckets','house','houseFurniture','masteries','perks','bank','pack','collections','route','queue','queueSlots','workJobId','workRarity','held','raidHeld'];
+export const characterFields=['lastTick','skills','equipment','brews','brewTier','brewBuckets','house','houseFurniture','masteries','perks','bank','bankLocked','pack','collections','route','queue','queueSlots','workJobId','workRarity','held','raidHeld'];
 const record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const routeFields=['zoneId','siteId','jobId','questId','onFull','limit','phase','best','errand','until'];
 const queueFields=['kind','siteId','jobId','zoneId','questId','onFull','limit','rarity','best','ticks'];
@@ -23,6 +23,7 @@ export function copyCharacter(player){
 
  for(const [key,fields]of Object.entries(characterGroups))if(record(result[key]))result[key]=Object.fromEntries(fields.filter(field=>Object.hasOwn(result[key],field)).map(field=>[field,result[key][field]]));
  if(record(result.houseFurniture))result.houseFurniture=Object.fromEntries(characterGroups.house.filter(id=>Object.hasOwn(result.houseFurniture,id)).map(id=>[id,record(result.houseFurniture[id])?{}:result.houseFurniture[id]]));
+ if(Object.hasOwn(result,'bankLocked'))result.bankLocked=Array.isArray(result.bankLocked)?Array.from(result.bankLocked,id=>Number.isSafeInteger(id)?id:null):null;
  if(Object.hasOwn(result,'route'))result.route=pick(result.route,routeFields);
  if(Object.hasOwn(result,'queue'))result.queue=Array.isArray(result.queue)?result.queue.map(task=>pick(task,queueFields)):false;
  return JSON.parse(JSON.stringify(result));

@@ -11,6 +11,14 @@ export function validateInventoryMap(raw){
  }
  return items;
 }
+export function validateInventoryLocks(raw){
+ if(!Array.isArray(raw))throw Error('invalidSnapshot');
+ return Array.from(raw,id=>{
+  if(!Number.isSafeInteger(id)||id<1)throw Error('invalidSnapshot');
+  validateInventoryMap({[id]:0});
+  return id;
+ });
+}
 export function readInventoryParts(player){
  const bank=validateInventoryMap(player?.bank);
  if(!Array.isArray(player.pack))throw Error('incompleteSnapshot');
@@ -23,5 +31,10 @@ export function readInventoryParts(player){
   pack[stack.itemId]=quantity;
  }
  for(const [id,qty]of Object.entries(pack))if(!Number.isSafeInteger((bank[id]??0)+qty))throw Error('invalidSnapshot');
- return {bank,pack};
+ const bankLocked=Object.hasOwn(player,'bankLocked')?validateInventoryLocks(player.bankLocked):[];
+ for(const id of bankLocked){
+  delete bank[id];
+  delete pack[id];
+ }
+ return {bank,pack,bankLocked};
 }

@@ -7,9 +7,10 @@ export function estimateCraftAction(state,job,count,players=collectionPlayers(st
  if(!Number.isSafeInteger(count)||count<=0)throw Error('invalidQuantity');
  if(!state.initialized)return {status:'uninitialized',seconds:null};
  if(state.config.levels[job.skill]<job.levelReq)return {status:'levelTooLow',seconds:null};
- const chance=job.upgrade?1:game.workChance(job,players.craft);
+ if(job.upgrade)return {status:'ok',seconds:checked(count*(game.upgradeTicks(players.craft,job.upgrade)*game.tickMs/1000))};
+ const chance=game.workChance(job,players.craft);
  if(!Number.isFinite(chance)||chance<=0)return {status:'unreachable',seconds:null};
- return {status:'ok',seconds:job.upgrade?0:checked(count*(game.tickMs/1000)/chance)};
+ return {status:'ok',seconds:checked(count*(game.tickMs/1000)/chance)};
 }
 function valueItems(items,prices,side){
  let total=0,missing=false;

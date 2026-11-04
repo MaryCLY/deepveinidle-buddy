@@ -1,5 +1,5 @@
 import {requireKeys} from './record-shape.js';
-import {validateInventoryMap as validateBank,readInventoryParts} from './character-inventory.js';
+import {validateInventoryMap as validateBank,validateInventoryLocks,readInventoryParts} from './character-inventory.js';
 import * as game from './upstream.js';
 import {craftingDefaults,craftingPlayer,normalizeCrafting,importCrafting,craftingSkills} from './crafting-model.js';
 import {gatheringDefaults,gatheringPlayer,normalizeGathering,importGathering,gatheringSkills} from './gathering-model.js';
@@ -16,7 +16,7 @@ function mergeConfig(gather,craft){
  for(const key of ['worldRarity','blessing'])config[key]=gather[key];
  return config;
 }
-export function collectionDefaults(){return {version:1,initialized:false,capturedAt:null,inventoryCapturedAt:null,worldTick:null,importWarnings:[],counts:{},bank:null,pack:null,buyMode:'ask',config:mergeConfig(gatheringDefaults(),craftingDefaults())};}
+export function collectionDefaults(){return {version:1,initialized:false,capturedAt:null,inventoryCapturedAt:null,worldTick:null,importWarnings:[],counts:{},bank:null,pack:null,bankLocked:[],buyMode:'ask',config:mergeConfig(gatheringDefaults(),craftingDefaults())};}
 export function collectionWorkConfig(state,kind){
  return (kind==='gather'?normalizeGathering:normalizeCrafting)(state.config);
 }
@@ -32,7 +32,7 @@ function validateCounts(raw,onInvalid){
  }return counts;
 }
 export function validateCollection(raw){
- requireKeys(raw,['version','initialized','capturedAt','inventoryCapturedAt','worldTick','importWarnings','counts','bank','pack','buyMode','config'],'invalidConfiguration');
+ requireKeys(raw,['version','initialized','capturedAt','inventoryCapturedAt','worldTick','importWarnings','counts','bank','pack','bankLocked','buyMode','config'],'invalidConfiguration');
  requireKeys(raw.config,[...configGroups,'worldRarity','blessing'],'invalidConfiguration');
  if(!record(raw)||raw.version!==1||typeof raw.initialized!=='boolean'||(raw.worldTick!==null&&(!Number.isSafeInteger(raw.worldTick)||raw.worldTick<0)||raw.initialized&&raw.worldTick===null))throw Error('invalidConfiguration');
  if(raw.capturedAt!==null&&(!Number.isSafeInteger(raw.capturedAt)||raw.capturedAt<=0||raw.capturedAt>Date.now()+60000))throw Error('invalidConfiguration');
@@ -42,7 +42,7 @@ export function validateCollection(raw){
  if(!['ask','bid'].includes(buyMode))throw Error('invalidConfiguration');
  const importWarnings=raw.importWarnings;
  if(!Array.isArray(importWarnings)||importWarnings.some(w=>!(typeof w==='string'&&/^collections\.invalid:[1-9]\d*$/.test(w)&&Number.isSafeInteger(Number(w.split(':')[1])))))throw Error('invalidConfiguration');
- const state={version:1,initialized:raw.initialized,worldTick:raw.worldTick,capturedAt:raw.capturedAt,inventoryCapturedAt,buyMode,importWarnings:[...importWarnings],counts:validateCounts(raw.counts),bank:raw.bank==null?null:validateBank(raw.bank),pack:raw.pack==null?null:validateBank(raw.pack),config:null};
+ const state={version:1,initialized:raw.initialized,worldTick:raw.worldTick,capturedAt:raw.capturedAt,inventoryCapturedAt,buyMode,importWarnings:[...importWarnings],counts:validateCounts(raw.counts),bank:raw.bank==null?null:validateBank(raw.bank),pack:raw.pack==null?null:validateBank(raw.pack),bankLocked:validateInventoryLocks(raw.bankLocked),config:null};
  if(state.bank&&state.pack)for(const [id,qty]of Object.entries(state.pack))if(!Number.isSafeInteger(qty+(state.bank[id]??0)))throw Error('invalidSnapshot');
  if(raw.bank===undefined||raw.pack===undefined)throw Error('invalidConfiguration');
  const gather=normalizeGathering(raw.config),craft=normalizeCrafting(raw.config);
@@ -64,11 +64,11 @@ export function importCollection(current,snapshot){
  const inventoryCapturedAt=snapshot.capturedAt;
  const world=readWorldBuffs(snapshot);
  let invalidCounts=0;
- const counts=validateCounts(snapshot.player.collections,()=>invalidCounts++),{bank,pack}=stock,craft=importCrafting(collectionWorkConfig(current,'craft'),snapshot),gather=importGathering(collectionWorkConfig(current,'gather'),snapshot);
+ const counts=validateCounts(snapshot.player.collections,()=>invalidCounts++),{bank,pack,bankLocked}=stock,craft=importCrafting(collectionWorkConfig(current,'craft'),snapshot),gather=importGathering(collectionWorkConfig(current,'gather'),snapshot);
  const warnings=[...craft.warnings,...gather.warnings].filter(k=>/^(skills|equipment|house|masteries|perks|brews|brewBuckets|brewTier|blessing)/.test(k));
  if(warnings.length)throw Error('incompleteSnapshot');
  gather.state.worldRarity=world.worldRarity;
- return validateCollection({...current,initialized:true,capturedAt:snapshot.capturedAt,worldTick:world.worldTick,importWarnings:[...(invalidCounts?[`collections.invalid:${invalidCounts}`]:[])],counts,bank,pack,inventoryCapturedAt,config:mergeConfig(gather.state,craft.state)});
+ return validateCollection({...current,initialized:true,capturedAt:snapshot.capturedAt,worldTick:world.worldTick,importWarnings:[...(invalidCounts?[`collections.invalid:${invalidCounts}`]:[])],counts,bank,pack,bankLocked,inventoryCapturedAt,config:mergeConfig(gather.state,craft.state)});
 }
 export function collectionTarget(state,id,target){
  const current=state.counts[id]??0,base=game.baseItemId(id),thresholds=game.collectionThresholds(base);

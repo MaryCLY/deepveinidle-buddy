@@ -1,3 +1,4 @@
+import {marketPriceLimit} from './engine/upstream.js';
 import {mobileMode,mobilePageIs} from './mobile-layout.js';
 import {characterRole} from './game-sync.js';
 const failure=code=>{throw Error(code);};
@@ -23,7 +24,7 @@ export function createGamePrefill(page,{doc=document,wait=ms=>new Promise(resolv
  }
  return {
   async purchase(request,guard=()=>true){
-   if(!Number.isSafeInteger(request.itemId)||request.itemId<=0||!Number.isSafeInteger(request.baseId)||request.baseId<=0||!Number.isInteger(request.tier)||request.tier<0||request.tier>4||!Number.isSafeInteger(request.quantity)||request.quantity<1||!Number.isSafeInteger(request.price)||request.price<1||request.price>1e9)failure('invalidPrefill');
+   if(!Number.isSafeInteger(request.itemId)||request.itemId<=0||!Number.isSafeInteger(request.baseId)||request.baseId<=0||!Number.isInteger(request.tier)||request.tier<0||request.tier>4||!Number.isSafeInteger(request.quantity)||request.quantity<1||!Number.isSafeInteger(request.price)||request.price<1||request.price>marketPriceLimit)failure('invalidPrefill');
    return run(request,guard,async check=>{
     if(find('[data-market-trade]')){
      click('[data-market-trade] [data-trade-close]');
