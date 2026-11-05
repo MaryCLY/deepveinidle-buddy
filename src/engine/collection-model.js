@@ -113,8 +113,7 @@ export function estimateCollection(state,id,job,players=collectionPlayers(state)
  if(!Number.isFinite(seconds)||!Number.isFinite(attempts)||Object.values(materials).some(n=>!Number.isFinite(n)||n>Number.MAX_SAFE_INTEGER))throw Error('quantityOverflow');
  return {...base,status:'ok',seconds,secondsPerPoint:seconds/points,points,quantity,attempts,materials,burn,caught,quality,actionSeconds:game.tickMs/1000/chance};
 }
-export function collectionRows(state){
- const players=collectionPlayers(state);
+export function collectionRows(state,players=collectionPlayers(state)){
  return collectionIds.flatMap(id=>{
   const routes=collectionRoutes(id),future=game.collectionThresholds(game.baseItemId(id)).filter(n=>n>(state.counts[id]??0));
   return routes.flatMap(job=>(future.length?future:[undefined]).map(goal=>estimateCollection(state,id,job,players,goal)));

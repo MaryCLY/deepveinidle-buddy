@@ -13,7 +13,7 @@
 | 模块 | 职责 |
 | --- | --- |
 | engine | 工作配置、收藏、库存、报价、原始概率与角色构造 |
-| workspace、crafting-estimates、planned-products | 订单校验、解析计算、采购抵扣与费用 |
+| workspace、crafting-estimates、metal-bars、planned-products | 订单校验、解析计算、收藏制造的锭库存分配与缺口展开、采购抵扣与费用 |
 | game-sync、capture、execution-status | 只读客户端采样、已有连接旁听、实时任务高亮 |
 | main、navigation、mobile-layout | 按角色挂载、入口和双端可视区域 |
 | app、theme、stable-view、frozen-columns | 面板交互、稳定节点及冻结表格 |
@@ -22,7 +22,9 @@
 | platform | GM／浏览器存储与行情读取 |
 | sorting、recipe-availability、fee-units | 排序、材料供应筛选和费用单位换算 |
 
-工作区持久化格式为version=2，材料方向保存为materialPriceMode，库存筛选保存为可选inventoryOnly（包含仓库和背包，缺省false），模式选择保存为可选selectedMode（缺省craft，存在但无效则拒绝），独立制造收藏固定单保存为可选collectionOrder，旧orders完整保留在制造模式；运行时按当前模式选择订单范围并组合角色与行情供引擎计算。角色同步不写存档，自动移除完成收藏实际改变订单时例外。加载、保存和恢复规则见[面板设计](panel.md#存储与验收)。
+app 为每次渲染创建包含工作区、只读行情快照及角色计算参数的上下文，显式传给候选、订单汇总和执行计划。预填按一次点击构造请求，后续守卫只刷新角色并比较完整计算输入签名。上下文及请求只保留在当前同步渲染或预填操作中。
+
+工作区持久化格式为version=2，材料方向保存为materialPriceMode，库存筛选保存为可选inventoryOnly（包含仓库和背包，缺省false），模式选择保存为可选selectedMode（缺省craft，存在但无效则拒绝），独立制造收藏固定单保存为可选collectionOrder，金属锭展开偏好保存为可选expandMetalBars（缺省false，关闭时省略），旧orders完整保留在制造模式；运行时按当前模式选择订单范围并组合角色与行情供引擎计算。角色同步不写存档，自动移除完成收藏实际改变订单时例外。加载、保存和恢复规则见[面板设计](panel.md#存储与验收)。
 
 来源角色身份未知时不读取或写入角色分桶。白名单采样每250ms进行，正常前台变化在1秒内更新；不读取登录凭据、聊天，不增加游戏连接。助手仅主动请求固定公开市场API，禁用凭据。
 

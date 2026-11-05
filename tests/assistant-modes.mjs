@@ -17,14 +17,27 @@ await build({stdin:{contents:`
    get:async(key,fallback)=>key==='modes-test'?structuredClone(window.raw):key.startsWith('dvi-buddy-debug')?true:fallback,
    set:async(key,value)=>{if(key==='modes-test'){window.raw=structuredClone(value);window.writes.push(value);}},
    market:async()=>{throw Error('fixture-market');}
-  },gameIntegration:integration,onPrefillFeedback:value=>window.hints.push(value)});
+  },gameIntegration:{...integration,action:(request,guard)=>{window.pendingGuard=guard;return integration.action(request,guard);}},onPrefillFeedback:value=>window.hints.push(value)});
   window.gatherAttempts=key=>collectionRows(window.panel.getWorkspace().character).find(row=>[row.id,row.jobId,row.target].join(':')===key).attempts;
   window.gatherSchemes=()=>gatheringCollectionRows(window.panel.getWorkspace().character);
   window.expectedGather=key=>Math.ceil(window.gatherAttempts(key));
   window.sendSnapshot=value=>window.panel.receive({role:'42',connection:1,sequence:++window.sequence,status:'live',source:'client',snapshot:value});
   window.sendSnapshot(snapshot);window.panel.open();
  };
- `,resolveDir:process.cwd()},outfile:'.test-artifacts/assistant-modes/harness.js',bundle:true,format:'iife',target:'es2022',loader:{'.css':'text'}});
+ `,resolveDir:process.cwd()},outfile:'.test-artifacts/assistant-modes/harness.js',bundle:true,format:'iife',target:'es2022',loader:{'.css':'text'},plugins:[{
+ name:'count-calculation-calls',
+ setup(build){
+  build.onLoad({filter:/\/src\/(workspace|engine\/collection-model|engine\/price-protocol)\.js$/},async({path})=>{
+   let contents=await fs.readFile(path,'utf8');
+   for(const [entry,key]of [
+    ['export function collectionPlayers(state){','players'],
+    ['export function createPriceSnapshot(state){','prices'],
+    ['export function estimateOrders(workspace,prices,players=collectionPlayers(workspace.character)){','plans'],
+   ])contents=contents.replace(entry,entry+`window.__calculationCalls??={};window.__calculationCalls.${key}=(window.__calculationCalls.${key}??0)+1;`);
+   return {contents,loader:'js'};
+  });
+ },
+}]});
 const browser=await launchBrowser(),checks=[],errors=[];
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1080}});page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
@@ -33,6 +46,14 @@ try{
  const raw=userDefaults();raw.selectedMode='collection';raw.orders[0].lines=[{kind:'craft',jobId:41,tier:0,count:10000}];raw.collectionOrder.lines=[{kind:'collection',itemId:40,jobId:41,target:100}];
  const mount=async value=>page.evaluate(({raw,snapshot})=>window.mountModes(raw,snapshot),{raw:value,snapshot:gameSnapshot()});
  await mount({...raw,selectedMode:'craft'});
+ const renderCalls=await page.evaluate(()=>{
+  const before={...window.__calculationCalls};
+  window.panel.open();
+  return Object.fromEntries(Object.entries(window.__calculationCalls).map(([key,count])=>[key,count-(before[key]??0)]));
+ });
+ assert.equal(renderCalls.prices,1);assert.equal(renderCalls.players,1);
+ checks.push('one render shares one quote snapshot and one player calculation across candidates, order metrics and execution');
+
  assert.deepEqual(await root.locator('#global-settings .tabs button').allTextContents(),['制造','收藏(制造)','收藏(采集)']);
  assert.equal(await root.locator('[data-action="mode-craft"]').getAttribute('aria-pressed'),'true');
  await mount(raw);
@@ -93,9 +114,28 @@ try{
 
  // Delay a second prefill after the game options are intentionally folded.
  await page.evaluate(()=>{document.querySelector('[data-opt-line]').setAttribute('aria-expanded','false');document.querySelector('[data-opt-sheet]').hidden=true;window.__blockOptionOpen=true;window.__wait=()=>new Promise(resolve=>window.releaseWait=resolve);});
- await execute.click();await page.waitForFunction(()=>!!window.releaseWait);await select('craft');await select('collection-gather');await page.evaluate(()=>{window.__wait=null;window.__blockOptionOpen=false;window.releaseWait();});
+ await execute.click();await page.waitForFunction(()=>!!window.releaseWait);
+ const guardProbe=await page.evaluate(()=>{
+  const before={...window.__calculationCalls},valid=[window.pendingGuard(),window.pendingGuard(),window.pendingGuard()];
+  return {before,after:{...window.__calculationCalls},valid};
+ });
+ assert.deepEqual(guardProbe.valid,[true,true,true]);assert.deepEqual(guardProbe.after,guardProbe.before);
+ await select('craft');await select('collection-gather');await page.evaluate(()=>{window.__wait=null;window.__blockOptionOpen=false;window.releaseWait();});
  await page.waitForFunction(()=>window.hints.some(value=>value.includes('请重试')));assert.deepEqual(await page.evaluate(()=>window.__commands),[]);
  checks.push('switching away and back invalidates a pending gathering draft');
+ await page.evaluate(()=>{window.hints=[];window.releaseWait=null;document.querySelector('[data-opt-line]').setAttribute('aria-expanded','false');document.querySelector('[data-opt-sheet]').hidden=true;window.__blockOptionOpen=true;window.__wait=()=>new Promise(resolve=>window.releaseWait=resolve);});
+ await execute.click();await page.waitForFunction(()=>!!window.releaseWait);
+ const bankBeforeLock=await page.evaluate(()=>window.panel.getWorkspace().character.bank);
+ await page.evaluate(snapshot=>window.sendSnapshot(snapshot),gameSnapshot({bankLocked:[40]}));
+ assert.deepEqual(await page.evaluate(()=>window.panel.getWorkspace().character.bank),bankBeforeLock);
+ const lockGuard=await page.evaluate(()=>{const before={...window.__calculationCalls};return {before,valid:window.pendingGuard(),after:{...window.__calculationCalls}};});
+ assert.equal(lockGuard.valid,false);assert.deepEqual(lockGuard.after,lockGuard.before);
+ await page.evaluate(()=>{window.__wait=null;window.__blockOptionOpen=false;window.releaseWait();});
+ await page.waitForFunction(()=>window.hints.some(value=>value.includes('请重试')));
+ assert.deepEqual(await page.evaluate(()=>window.__commands),[]);
+ await page.evaluate(snapshot=>window.sendSnapshot(snapshot),gameSnapshot());
+ checks.push('prefill guards compare inputs without recalculating plans and reject lock-only inventory changes');
+
  await select('craft');assert.deepEqual(await root.locator('.content > section').evaluateAll(els=>els.map(e=>e.id)),['global-settings','recipes','procurement','execution-plan']);assert.equal(await root.locator('#orders').count(),1);assert.equal(await root.locator('[data-pricing="product"]').count(),1);assert.equal(await root.locator('[data-material="1"] td').nth(3).textContent(),'10,000 / 0 / 0');
  await root.locator('#global-product-price-mode').selectOption('ask');await select('collection-craft');await select('craft');assert.equal(await root.locator('#global-product-price-mode').inputValue(),'ask');
  checks.push('manufacturing keeps multi-order controls and global pricing');
@@ -122,6 +162,61 @@ try{
  await row.locator('[data-action="target-down"]').click();assert.match(await row.textContent(),/9 → 10/);await row.locator('[data-action="target-down"]').click();assert.equal(await row.locator('[data-action="target-down"]').isDisabled(),true);
  await select('collection-gather');assert.equal(await root.locator('[data-action="prefill-gather"]').count(),0);assert.equal(await root.locator('#recipe-candidates th').count(),5);
  checks.push('turning debug off hides prefill only, leaves target operations and disables the lower boundary');
+ const bars=structuredClone(raw);
+ bars.orders[0].lines=[{kind:'craft',jobId:51,tier:0,count:2}];
+ bars.collectionOrder.lines=[{kind:'collection',itemId:80,jobId:51,target:100}];
+ await mount(bars);
+ const barToggle=root.locator('#global-settings #expand-metal-bars');
+ assert.equal(await barToggle.isChecked(),false);
+ assert.equal(await root.locator('[data-material="40"]').count(),1);
+ await barToggle.check();
+ await page.waitForFunction(()=>window.raw.expandMetalBars===true);
+ const smelt=root.locator('[data-execution-action^="bar:"]');
+ await smelt.waitFor();
+ assert.match(await smelt.textContent(),/配套炼锭/);
+ assert.equal(await smelt.locator('[data-action="target-up"]').count(),0);
+ assert.deepEqual(await root.locator('#execution-actions tbody tr').evaluateAll(rows=>rows.map(row=>row.dataset.executionAction)),['bar:41:0','collection:80']);
+ assert.equal(await root.locator('[data-material="40"] td').nth(3).textContent(),'200 / 0 / 200');
+ assert.equal(await root.locator('[data-material="1"]').count(),1);
+ const mergedBars=await page.evaluate(()=>structuredClone(window.raw));
+ mergedBars.collectionOrder.lines.push({kind:'collection',itemId:360,jobId:308,target:100});
+ await mount(mergedBars);
+ assert.equal(await smelt.count(),1);
+ assert.equal(await smelt.locator('td').nth(3).textContent(),'300');
+ assert.equal(await smelt.locator('[data-action="target-up"]').count(),0);
+ assert.equal(await root.locator('[data-action="target-up"]').count(),2);
+ assert.equal(await root.locator('#execution-actions tbody tr').first().getAttribute('data-execution-action'),'bar:41:0');
+ assert.deepEqual((await root.locator('#execution-actions tbody tr').evaluateAll(rows=>rows.map(row=>row.dataset.executionAction))).sort(),['bar:41:0','collection:360','collection:80']);
+ await root.locator('[data-execution-action="collection:360"] [data-action="remove-line"]').click();
+ await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').shadowRoot.querySelector('[data-execution-action="bar:41:0"] td:nth-child(4)')?.textContent==='200');
+ const savedBars=await page.evaluate(()=>window.raw);
+ assert.deepEqual(savedBars.collectionOrder.lines,bars.collectionOrder.lines);
+ await select('craft');
+ assert.equal(await barToggle.count(),0);
+ assert.equal(await smelt.count(),0);
+ assert.equal(await root.locator('[data-material="40"] td').nth(3).textContent(),'4 / 0 / 0');
+ assert.equal(await root.locator('[data-material="1"]').count(),0);
+ assert.equal(await page.evaluate(()=>window.raw.expandMetalBars),true);
+ await select('collection-craft');
+ assert.equal(await barToggle.isChecked(),true);
+ await page.evaluate(snapshot=>window.sendSnapshot(snapshot),gameSnapshot({collections:{80:98},bank:{40:3}}));
+ await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').shadowRoot.querySelector('[data-material="40"] td:nth-child(4)')?.textContent==='4 / 3 / 1');
+ assert.equal(await smelt.locator('td').nth(3).textContent(),'1');
+ assert.equal(await root.locator('[data-material="1"] td').nth(3).textContent(),'1 / 0 / 0');
+ assert.equal(await root.locator('[data-material="40"] td').nth(2).textContent(),'0');
+ await page.evaluate(snapshot=>window.sendSnapshot(snapshot),gameSnapshot({collections:{80:98},bank:{40:4}}));
+ await smelt.waitFor({state:'detached'});
+ assert.equal(await root.locator('[data-material="40"] td').nth(3).textContent(),'4 / 4 / 0');
+ assert.equal(await root.locator('[data-material="1"]').count(),0);
+ await select('collection-gather');
+ assert.equal(await barToggle.count(),0);
+ await mount(savedBars);
+ assert.equal(await barToggle.isChecked(),true);
+ await barToggle.uncheck();
+ await page.waitForFunction(()=>!Object.hasOwn(window.raw,'expandMetalBars'));
+ await smelt.waitFor({state:'detached'});
+ assert.equal(await root.locator('[data-material="40"]').count(),1);
+ checks.push('metal bar expansion is scoped to the top collection setting, roundtrips and derives actions without changing orders');
  await select('collection-craft');await toggleGameLanguage(page);assert.ok((await root.locator('#execution-actions').textContent()).includes('Current → target'));await page.setViewportSize({width:390,height:844});await page.evaluate(async()=>{const {installMobileFixture}=await import('/tests/mobile-fixture.js');installMobileFixture();});await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').hasAttribute('data-mobile'));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await root.locator('#execution-actions').screenshot({path:'.test-artifacts/assistant-modes/mobile-execution.png'});await page.screenshot({path:'.test-artifacts/assistant-modes/mobile.png'});
  checks.push('translated editable plans fit the mobile layout with internal horizontal scrolling');

@@ -1,7 +1,8 @@
 import * as game from './engine/upstream.js';
-import {craftingMaterials} from './engine/crafting-model.js';
+import {craftingJobs,craftingMaterials} from './engine/crafting-model.js';
 import {collectionPlayers,collectionPrice} from './engine/collection-model.js';
 import {expectedCraftProduct} from './engine/work-expectation.js';
+import {expandBarMaterials} from './metal-bars.js';
 const checked=value=>{if(!Number.isFinite(value)||value<0||value>Number.MAX_SAFE_INTEGER)throw Error('quantityOverflow');return value;};
 export function estimateCraftAction(state,job,count,players=collectionPlayers(state)){
  if(!Number.isSafeInteger(count)||count<=0)throw Error('invalidQuantity');
@@ -20,6 +21,21 @@ function valueItems(items,prices,side){
   else total=checked(total+checked(qty*(price??0)));
  }
  return missing?null:total;
+}
+export function estimateBarSteps(state,materials,players,availableBars){
+ const expanded=expandBarMaterials(materials,availableBars);
+ const steps=expanded.steps.map(step=>{
+  if(step.count===null)return {...step,status:'unknownInventory',seconds:null};
+  if(state.bankLocked.includes(step.outputItemId))return {...step,status:'materialLocked',seconds:null};
+  const job=craftingJobs.find(job=>job.id===step.jobId);
+  return {...step,...estimateCraftAction(state,job,step.count,players)};
+ });
+ return {...expanded,steps};
+}
+export function withBarTime(action,steps){
+ if(action.status!=='ok')return action;
+ const blocked=steps.find(step=>step.status!=='ok');
+ return blocked?{status:blocked.status,seconds:null}:{status:'ok',seconds:steps.reduce((sum,step)=>checked(sum+step.seconds),action.seconds)};
 }
 export function estimateCraftRecipe(state,job,tier,prices,players=collectionPlayers(state),productPriceMode='bid'){
  if(!['ask','bid'].includes(productPriceMode))throw Error('invalidPriceMode');

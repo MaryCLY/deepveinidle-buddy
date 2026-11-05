@@ -1,6 +1,6 @@
 import {requireKeys} from './engine/record-shape.js';
 import {plannedProducts} from './planned-products.js';
-import {estimateCraftAction} from './crafting-estimates.js';
+import {estimateBarSteps,estimateCraftAction,withBarTime} from './crafting-estimates.js';
 import * as game from './engine/upstream.js';
 import {craftingJobs,craftingTiers,craftingMaterials} from './engine/crafting-model.js';
 import {gatheringSkills} from './engine/gathering-model.js';
@@ -54,14 +54,16 @@ export function userDefaults(){const order=createOrder();return {version:2,revis
 export function defaults(){return applyUserWorkspace({character:collectionDefaults(),prices:priceDefaults()},userDefaults());}
 // Runtime composition for the calculation engine; never persist this object.
 export function validateWorkspace(raw){
- requireKeys(raw,['version','revision','orders','currentOrderId','character','prices','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode','inventoryOnly'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
+ requireKeys(raw,['version','revision','orders','currentOrderId','character','prices','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode','inventoryOnly','expandMetalBars'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
  if(raw.version!==1)throw Error('invalidWorkspace');
- const {filters,collectionOrder,selectedMode,inventoryOnly}=workspaceForStorage(raw);
- return {...raw,filters,collectionOrder,selectedMode,inventoryOnly,character:validateCollection(raw.character),prices:normalizePriceState(raw.prices)};
+ const {filters,collectionOrder,selectedMode,inventoryOnly,expandMetalBars=false}=workspaceForStorage(raw);
+ return {...raw,filters,collectionOrder,selectedMode,inventoryOnly,expandMetalBars,character:validateCollection(raw.character),prices:normalizePriceState(raw.prices)};
 }
 export function validateUserWorkspace(raw){
  if(!record(raw)||raw.version!==2)throw Error('unsupportedWorkspaceVersion');
- requireKeys(raw,['version','revision','orders','currentOrderId','materialPriceMode','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode','inventoryOnly'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
+ requireKeys(raw,['version','revision','orders','currentOrderId','materialPriceMode','productPriceMode','excludeInsufficientAsks','autoRemove','filters',...['collectionOrder','selectedMode','inventoryOnly','expandMetalBars'].filter(key=>Object.hasOwn(raw,key))],'invalidWorkspace');
+ const expandMetalBars=Object.hasOwn(raw,'expandMetalBars')?raw.expandMetalBars:false;
+ if(typeof expandMetalBars!=='boolean')throw Error('invalidWorkspace');
  const inventoryOnly=Object.hasOwn(raw,'inventoryOnly')?raw.inventoryOnly:false;
  if(typeof inventoryOnly!=='boolean')throw Error('invalidPriceMode');
  const selectedMode=Object.hasOwn(raw,'selectedMode')?raw.selectedMode:'craft';
@@ -83,14 +85,14 @@ export function validateUserWorkspace(raw){
  // A validated legacy shared filter seeds an independent gathering preference.
  if(!hasGather)filters.collectionGather={...filters.collection};
  if(!orders.length||!orders.some(order=>order.id===raw.currentOrderId))throw Error('invalidWorkspace');
- return {version:2,revision:raw.revision,selectedMode,inventoryOnly,orders,currentOrderId:raw.currentOrderId,collectionOrder,materialPriceMode:raw.materialPriceMode,productPriceMode:raw.productPriceMode,excludeInsufficientAsks:raw.excludeInsufficientAsks,autoRemove:raw.autoRemove,filters};
+ return {version:2,revision:raw.revision,selectedMode,inventoryOnly,...(expandMetalBars?{expandMetalBars}:{}),orders,currentOrderId:raw.currentOrderId,collectionOrder,materialPriceMode:raw.materialPriceMode,productPriceMode:raw.productPriceMode,excludeInsufficientAsks:raw.excludeInsufficientAsks,autoRemove:raw.autoRemove,filters};
 }
 export function workspaceForStorage(workspace){
- return validateUserWorkspace({version:2,revision:workspace.revision,orders:workspace.orders,currentOrderId:workspace.currentOrderId,...Object.fromEntries(['collectionOrder','selectedMode','inventoryOnly'].filter(key=>Object.hasOwn(workspace,key)).map(key=>[key,workspace[key]])),materialPriceMode:workspace.character.buyMode,productPriceMode:workspace.productPriceMode,excludeInsufficientAsks:workspace.excludeInsufficientAsks,autoRemove:workspace.autoRemove,filters:workspace.filters});
+ return validateUserWorkspace({version:2,revision:workspace.revision,orders:workspace.orders,currentOrderId:workspace.currentOrderId,...Object.fromEntries(['collectionOrder','selectedMode','inventoryOnly','expandMetalBars'].filter(key=>Object.hasOwn(workspace,key)).map(key=>[key,workspace[key]])),materialPriceMode:workspace.character.buyMode,productPriceMode:workspace.productPriceMode,excludeInsufficientAsks:workspace.excludeInsufficientAsks,autoRemove:workspace.autoRemove,filters:workspace.filters});
 }
 export function applyUserWorkspace(workspace,raw){
  const {materialPriceMode,...user}=validateUserWorkspace(raw);
- return {...workspace,...user,version:1,character:{...workspace.character,buyMode:materialPriceMode}};
+ return {...workspace,...user,expandMetalBars:user.expandMetalBars??false,version:1,character:{...workspace.character,buyMode:materialPriceMode}};
 }
 export function putLine(order,raw){
  if(raw.kind==='craft'&&raw.count===0){order.lines=order.lines.filter(l=>lineKey(l)!==lineKey(raw));return;}
@@ -104,41 +106,44 @@ export function removeCompleted(workspace){
  for(const order of [...workspace.orders,...(workspace.collectionOrder?[workspace.collectionOrder]:[])]){const lines=order.lines.filter(l=>l.kind!=='collection'||!collectionTarget(workspace.character,l.itemId,l.target).complete);if(lines.length!==order.lines.length){order.lines=lines;changed=true;}}
  return changed;
 }
-function summarizeExecutionActions(entries,rows,canAssess){
- const groups=new Map(),stockById=new Map(rows.map(row=>[row.id,row]));
+function summarizeExecutionActions(entries,state,canAssess){
+ const groups=new Map(),required=new Map();
+ const owned=id=>state.bank===null||state.pack===null?null:state.bankLocked.includes(Number(id))?0:add(state.bank[id]??0,state.pack[id]??0);
  const increment=(row,field,value)=>{if(row[field]===null)return;try{row[field]=add(row[field],value);}catch(error){row[field]=null;row.issues.add(error.message);}};
- for(const entry of entries){
+ const actions=entries.flatMap(entry=>[...(entry.barSteps??[]),entry]);
+ for(const entry of actions){
   if(entry.status==='complete')continue;
-  const tier=entry.kind==='craft'?entry.tier:game.itemTier(entry.itemId),key=String(entry.jobId)+':'+tier;
-  if(!groups.has(key))groups.set(key,{key,jobId:entry.jobId,tier,craftCount:0,collectionAttempts:0,seconds:0,timeUnknown:false,materials:{},issues:new Set()});
+  const tier=entry.kind==='craft'?entry.tier:game.itemTier(entry.itemId),key=entry.prerequisite?'bar:'+entry.jobId+':'+tier:String(entry.jobId)+':'+tier;
+  if(!groups.has(key))groups.set(key,{key,...(entry.prerequisite?{prerequisite:true}:{}),jobId:entry.jobId,tier,craftCount:0,collectionAttempts:0,seconds:0,timeUnknown:false,materials:{},issues:new Set()});
   const row=groups.get(key);
-  if(entry.kind==='craft')increment(row,'craftCount',entry.count);
+  if(entry.kind==='craft'){if(entry.count===null)row.craftCount=null;else increment(row,'craftCount',entry.count);}
   else if(entry.status==='ok'&&entry.attempts!==null&&entry.attempts!==undefined)increment(row,'collectionAttempts',entry.attempts);
   else row.collectionAttempts=null;
   if(entry.status==='ok'&&entry.seconds!==null&&entry.seconds!==undefined)increment(row,'seconds',entry.seconds);
   else row.timeUnknown=true;
   if(entry.status!=='ok')row.issues.add(entry.status);
-  else for(const [id,qty]of Object.entries(entry.materials)){try{row.materials[id]=add(row.materials[id]??0,qty);}catch(error){row.issues.add(error.message);}}
+  else for(const [id,qty]of Object.entries(entry.materials)){try{row.materials[id]=add(row.materials[id]??0,qty);required.set(id,add(required.get(id)??0,qty));}catch(error){row.issues.add(error.message);}}
  }
  return [...groups.values()].map(row=>{
   let count=null;
   if(row.craftCount!==null&&row.collectionAttempts!==null)try{count=add(row.craftCount,row.collectionAttempts);}catch(error){row.issues.add(error.message);}
   const materials=Object.entries(row.materials);
-  const sufficient=canAssess&&row.issues.size===0&&materials.length>0&&materials.every(([id,qty])=>{
-   const stock=stockById.get(Number(id));
-   return stock?.owned!=null&&stock.owned>=Math.ceil(qty);
-  });
-  const materialStatus=sufficient?(materials.every(([id])=>{
-   const stock=stockById.get(Number(id));
-   return stock.owned>=stock.required;
-  })?'ready':'shared'):null;
-  return {key:row.key,jobId:row.jobId,tier:row.tier,craftCount:row.craftCount,collectionAttempts:row.collectionAttempts,count,seconds:row.timeUnknown?null:row.seconds,materialStatus,issues:[...row.issues]};
+  const sufficient=canAssess&&row.issues.size===0&&materials.length>0&&materials.every(([id,qty])=>owned(id)>=Math.ceil(qty));
+  const materialStatus=sufficient?(materials.every(([id])=>owned(id)>=Math.ceil(required.get(id)))?'ready':'shared'):null;
+  return {key:row.key,...(row.prerequisite?{prerequisite:true}:{}),jobId:row.jobId,tier:row.tier,craftCount:row.craftCount,collectionAttempts:row.collectionAttempts,count,seconds:row.timeUnknown?null:row.seconds,materialStatus,issues:[...row.issues]};
  }).sort((a,b)=>String(a.jobId).localeCompare(String(b.jobId),undefined,{numeric:true})||a.tier-b.tier);
 }
-export function estimateOrders(workspace,prices){
- const state=workspace.character,players=collectionPlayers(state),selected=workspace.orders.filter(o=>o.enabled),materials=new Map(),products=new Map(),seen=new Set(),conflicts=new Set();
+export function estimateOrders(workspace,prices,players=collectionPlayers(workspace.character)){
+ const state=workspace.character,selected=workspace.orders.filter(o=>o.enabled),materials=new Map(),products=new Map(),seen=new Set(),conflicts=new Set();
  for(const order of selected)for(const line of order.lines)if(line.kind==='collection'){
   if(seen.has(line.itemId))conflicts.add(line.itemId);seen.add(line.itemId);
+ }
+ // Expansion belongs only to the fixed Collection (Craft) calculation scope.
+ const expandMetalBars=workspace.expandMetalBars&&selected.length===1&&selected[0].id===workspace.collectionOrder?.id;
+ const availableBars=expandMetalBars&&state.bank!==null&&state.pack!==null?new Map():null;
+ if(availableBars)for(const inventory of [state.bank,state.pack])for(const [id,qty]of Object.entries(inventory)){
+  const itemId=Number(id);
+  if(!state.bankLocked.includes(itemId))availableBars.set(itemId,add(availableBars.get(itemId)??0,qty));
  }
  const entries=[],orders=[];let blocked=0,points=0,craftSeconds=0,collectionSeconds=0;
  const materialAdd=(map,id,qty)=>map.set(Number(id),add(map.get(Number(id))??0,qty));
@@ -150,7 +155,6 @@ export function estimateOrders(workspace,prices){
     if(line.kind==='craft'){
      const job=craftingJobs.find(j=>j.id===line.jobId);entry.materials=craftingMaterials(job,line.tier,line.count);
      Object.assign(entry,estimateCraftAction(state,job,line.count,players));
-     if(entry.status==='ok')craftSeconds=add(craftSeconds,entry.seconds);
     }else{
      const job=collectionRoutes(line.itemId).find(j=>j.id===line.jobId),estimate=estimateCollection(state,line.itemId,job,players,line.target);
      entry={...entry,...estimate,remaining:state.initialized?Math.max(0,line.target-(state.counts[line.itemId]??0)):null};
@@ -164,17 +168,33 @@ export function estimateOrders(workspace,prices){
        materials:Object.fromEntries(inputs.map(input=>[input.itemId,add(0,input.qty*attempts)])),
       };
      }
-     if(entry.status==='ok'){points=add(points,entry.points);collectionSeconds=add(collectionSeconds,entry.seconds);}
     }
-    if(!['ok','complete'].includes(entry.status)){blocked++;ownBlocked=true;if(line.kind==='collection')ownMaterialsUnknown=true;}
+    const tier=line.kind==='craft'?line.tier:game.itemTier(line.itemId);
+    const expanded=expandMetalBars?estimateBarSteps(state,entry.materials,players,availableBars):{costMaterials:entry.materials,requirements:entry.materials,stockUsed:{},steps:[]};
+    if(expanded.steps.some(step=>step.status==='unknownInventory'))ownMaterialsUnknown=true;
+    if(expanded.steps.length)entry.barSteps=expanded.steps.map(step=>({...step,prerequisite:true}));
+    const timing=withBarTime(entry,expanded.steps);
+    if(!['ok','complete'].includes(timing.status)){
+     blocked++;ownBlocked=true;if(line.kind==='collection'&&entry.status!=='ok')ownMaterialsUnknown=true;
+    }
     if(entry.status==='ok'){
      const job=craftingJobs.find(j=>j.id===line.jobId)??game.recipes.find(j=>j.id===line.jobId);
-     entry.products=plannedProducts(job,line.kind==='craft'?line.tier:game.itemTier(line.itemId),line.kind==='craft'?line.count:entry.attempts,players);
+     entry.products=plannedProducts(job,tier,line.kind==='craft'?line.count:entry.attempts,players);
      for(const [id,qty]of Object.entries(entry.products))materialAdd(products,id,qty);
-     ownSeconds=add(ownSeconds,entry.seconds);
+     for(const step of expanded.steps)if(step.status==='ok')materialAdd(products,step.outputItemId,step.count);
+     if(line.kind==='collection')points=add(points,entry.points);
+     if(timing.status==='ok'){
+      ownSeconds=add(ownSeconds,timing.seconds);
+      if(line.kind==='craft')craftSeconds=add(craftSeconds,timing.seconds);
+      else collectionSeconds=add(collectionSeconds,timing.seconds);
+     }
     }
     // Fixed crafting requirements remain available even when action time is unknown.
-    if(line.kind==='craft'||entry.status==='ok')for(const [id,qty]of Object.entries(entry.materials)){materialAdd(materials,id,qty);materialAdd(own,id,qty);}
+    if(line.kind==='craft'||entry.status==='ok'){
+     for(const [id,qty]of Object.entries(expanded.requirements))materialAdd(materials,id,qty);
+     for(const [id,qty]of Object.entries(expanded.costMaterials))materialAdd(own,id,qty);
+     for(const [id,qty]of Object.entries(expanded.stockUsed))availableBars.set(Number(id),availableBars.get(Number(id))-qty);
+    }
    }catch(error){entry.status=error.message;blocked++;ownBlocked=true;ownMaterialsUnknown=true;}
    entries.push(entry);
   }
@@ -190,7 +210,7 @@ export function estimateOrders(workspace,prices){
  let subtotal=0,missingPrices=0,unknownInventory=false;
  const rows=[...materials].sort((a,b)=>a[0]-b[0]).map(([id,exact])=>{
   const required=Math.ceil(exact);if(!quantity(required))throw Error('quantityOverflow');
-  const owned=state.bank===null||state.pack===null?null:add(state.bank[id]??0,state.pack[id]??0);
+  const owned=state.bank===null||state.pack===null?null:state.bankLocked.includes(id)?0:add(state.bank[id]??0,state.pack[id]??0);
   const produced=blocked?null:state.bankLocked.includes(id)?0:(products.get(id)??0);
   const purchase=owned===null||produced===null?null:Math.ceil(Math.max(0,required-owned-produced));
   const quote=collectionPrice(id,prices,state.buyMode);
@@ -200,16 +220,16 @@ export function estimateOrders(workspace,prices){
   return {id,required,owned,produced,purchase,price:quote.price,cost};
  });
  const materialCost=orders.some(order=>order.materialValue===null)?null:orders.reduce((sum,order)=>add(sum,order.materialValue),0);
- return {entries,orders,rows,materialCost,actions:summarizeExecutionActions(entries,rows,blocked===0&&!unknownInventory),blocked,conflicts:[...conflicts],points:blocked?null:points,craftSeconds:entries.some(e=>e.kind==='craft'&&e.status!=='ok')?null:craftSeconds,collectionSeconds:entries.some(e=>e.kind==='collection'&&!['ok','complete'].includes(e.status))?null:collectionSeconds,missingPrices,unknownInventory,subtotal,total:blocked||missingPrices||unknownInventory?null:subtotal};
+ return {entries,orders,rows,materialCost,actions:summarizeExecutionActions(entries,state,blocked===0&&state.bank!==null&&state.pack!==null),blocked,conflicts:[...conflicts],points:blocked?null:points,craftSeconds:entries.some(e=>e.kind==='craft'&&e.status!=='ok')?null:craftSeconds,collectionSeconds:entries.some(e=>e.kind==='collection'&&(!['ok','complete'].includes(e.status)||e.barSteps?.some(step=>step.status!=='ok')))?null:collectionSeconds,missingPrices,unknownInventory,subtotal,total:blocked||missingPrices||unknownInventory?null:subtotal};
 }
 // Editable collection rows retain intent identity, including completed/blocked targets.
 export function collectionActions(plan){
- const actions=new Map(plan.actions.map(row=>[`${row.jobId}:${row.tier}`,row]));
- return plan.entries.map(entry=>{
+ const actions=new Map(plan.actions.map(row=>[row.key,row]));
+ return [...plan.actions.filter(row=>row.prerequisite),...plan.entries.map(entry=>{
   const tier=game.itemTier(entry.itemId),action=actions.get(`${entry.jobId}:${tier}`);
   return {key:lineKey(entry),jobId:entry.jobId,tier,itemId:entry.itemId,target:entry.target,status:entry.status,
    count:entry.status==='complete'?0:entry.status==='ok'?entry.attempts:null,
    seconds:entry.status==='complete'?0:entry.status==='ok'?entry.seconds:null,
    materialStatus:entry.status==='ok'?action?.materialStatus:null,issues:['ok','complete'].includes(entry.status)?[]:[entry.status]};
- });
+ })];
 }
