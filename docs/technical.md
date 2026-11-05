@@ -28,6 +28,8 @@
 
 安装名为DeepVeinIdle-Buddy，namespace为https://dvi-lab.pages.dev，author为Alice。授权仅含unsafeWindow、GM_getValue、GM_setValue、GM_xmlhttpRequest，匹配两个游戏站点。调试功能的公开说明边界见[面板设计](panel.md)。
 
+入口在 `document-start` 优先使用 `unsafeWindow`，该变量未定义时使用 `window`。回退要求脚本运行在页面主世界，并由脚本管理器提供上述三个 GM API。隔离世界中的 `window` 无法读取页面的 `deepvein` 或监听游戏创建的 WebSocket。游戏可能在脚本启动后才设置 `deepvein`，因此入口不以它是否存在来选择窗口。
+
 ## 开发与验证
 
 npm test运行计算、数据边界、接入和发布单元检查。npm run build生成userscript、演示与摘要清单；npm start提供本地演示，npm run test:ui运行浏览器场景，支持传入场景名。测试截图和日志写入.test-artifacts，CI保留诊断artifact，不提交重复执行日志。

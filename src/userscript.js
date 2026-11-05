@@ -1,2 +1,3 @@
 import {startUserscript} from './main.js';
-startUserscript(unsafeWindow,{get:GM_getValue,set:GM_setValue,request:GM_xmlhttpRequest});
+const page=typeof unsafeWindow==='undefined'?window:unsafeWindow;
+startUserscript(page,{get:GM_getValue,set:GM_setValue,request:GM_xmlhttpRequest});
