@@ -1,6 +1,6 @@
 # 当前状态
 
-版本：**0.4.7**。计算基线：**1.0.1211**。发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准；历史变更见[更新说明](../CHANGELOG.md)。
+版本：**0.5.0**。计算基线：**1.0.1211**。发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准；历史变更见[更新说明](../CHANGELOG.md)。
 
 ## 功能范围
 
@@ -12,16 +12,12 @@
 - 工作区version=2保存订单、界面输入及可选collectionOrder／selectedMode；完整保留旧混合订单于制造模式。字段缺失与损坏分别处理，读取不自动写回，新增字段不支持旧版降级。角色与行情只存会话内存，串行保存及revision冲突保护保留。
 - GitHub Actions验证与tag发布，仓库Webhook同步Greasy Fork；构建绑定版本、来源提交和摘要。统一入口见[发布日常入口](releasing.md#日常入口)。
 
-## 验证与边界
-
-待发布调整
-
 - 计算基线更新至 1.0.1211，核验配方、装备、收藏及市场分类映射。市场草稿单价采用客户端上限（100 亿金币），装备升级计入站点耗时和工时费用，锁定材料排除在可用库存之外，精通切页后按当前生效等级估算。
 - 收藏（制造）新增金属锭展开开关，位于顶部「材料」左侧，按角色保存。固定计划先抵扣同品质可用锭库存，再展开缺口；采购产物值计入配套炼锭，执行计划按金属和品质合并步骤。配方表沿用原配方口径。
 - 每次渲染共享行情快照和角色计算参数。预填点击时生成一次请求，等待期间刷新角色并比较完整输入签名。
 
-本轮功能收尾及文档、代码、测试清理通过 205 项单元测试、本地构建及全部 25 个隔离浏览器场景（305 项检查），并检查设计文档与代码一致性。浏览器结果见 .test-artifacts/verification/summary.json。
+## 验证与边界
 
-完整发布门禁另含锁定依赖安装，发布任务结果见 .test-artifacts/release-task/summary.json，线上结果见 Actions 及 Release。本地诊断不提交。
+发布门禁包含锁定依赖安装、单元测试、本地构建及完整隔离浏览器验证。当前发布任务结果见 .test-artifacts/release-task/summary.json，浏览器结果见 .test-artifacts/verification/summary.json，线上结果见 Actions 及 Release。本地诊断不提交。
 
 隔离浏览器不代替真实脚本管理器、账号、Android／iOS真机、安全区域、系统键盘和长期运行验收。本轮没有真实账号或移动真机验收，不将本地通过描述为真实环境验证。
