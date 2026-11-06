@@ -60,6 +60,37 @@ let page;try{
  assert.equal(await page.locator('[data-market-search]').inputValue(),await root.locator('[data-material="1"] td').first().textContent());assert.equal(await page.locator('[data-market-search]').inputValue(),'铜矿');
  await toggleGameLanguage(page);await buy.click();assert.equal(await page.evaluate(()=>window.__draftCloses),1);assert.equal(await page.locator('[data-market-search]').inputValue(),await root.locator('[data-material="1"] td').first().textContent());assert.equal(await page.locator('[data-market-search]').inputValue(),'Copper');assert.deepEqual(await page.evaluate(()=>window.__commands),[]);await toggleGameLanguage(page);checks.push('market search follows the visible material name in both Chinese and English after switching the assistant language');
 
+ // Change live inventory while market navigation is waiting, through the real panel guard.
+ for(const [change,cancel] of [['other-produced',false],['other-consumed',false],['other-pack',false],['target-stock',true],['target-locked',true]]){
+  const quantity=Number((await root.locator('[data-material="1"] td').nth(2).textContent()).replaceAll(',',''));
+  await page.evaluate(change=>{
+   const find=selector=>document.querySelector(selector),state=window.deepvein.session.state;
+   window.__savedInventory={bank:structuredClone(state.bank),pack:structuredClone(state.pack),bankLocked:state.bankLocked??[]};
+   find('[data-market-trade]').hidden=true;find('[data-market-window]').hidden=true;find('[data-market-sheet]').hidden=true;
+   find('[data-trade-qty-in]').value='777';find('[data-open="market"]').onclick=()=>{};
+   window.__inventoryWaits=0;window.__wait=async()=>{
+    if(window.__inventoryWaits++)return;
+    if(change==='other-produced')state.bank[2]=(state.bank[2]??0)+1;
+    if(change==='other-consumed')state.bank[2]--;
+    if(change==='other-pack')state.pack.push({itemId:2,qty:1});
+    if(change==='target-stock')state.bank[1]++;
+    if(change==='target-locked')state.bankLocked=[1];
+    find('[data-market-window]').hidden=false;
+   };
+  },change);
+  try{
+   await buy.click();
+   await page.waitForFunction(()=>window.__inventoryWaits>0&&!document.querySelector('#deepveinidle-buddy').shadowRoot.querySelector('[data-action="prefill-purchase"][data-item="1"]').disabled);
+   if(cancel){assert.ok((await page.locator('[data-buddy-hint]').textContent()).includes('请重试'),change);assert.equal(await page.locator('[data-market-trade]').isVisible(),false,change);assert.equal(await page.locator('[data-trade-qty-in]').inputValue(),'777',change);}
+   else{assert.equal(await page.locator('[data-buddy-hint]').textContent(),'',change);assert.equal(await page.locator('[data-market-trade]').isVisible(),true,change);assert.equal(Number(await page.locator('[data-trade-qty-in]').inputValue()),quantity,change);assert.equal(await page.locator('[data-trade-price-in]').inputValue(),'112',change);}
+   assert.deepEqual(await page.evaluate(()=>window.__commands),[]);
+  }finally{
+   await page.evaluate(()=>{Object.assign(window.deepvein.session.state,window.__savedInventory);window.deepvein.session.state.lastTick++;window.__wait=null;document.querySelector('[data-open="market"]').onclick=window.__marketOpen;});
+   await page.waitForFunction(()=>window.__panel.getWorkspace().character.bank[1]===window.deepvein.session.state.bank[1]&&JSON.stringify(window.__panel.getWorkspace().character.bankLocked)===JSON.stringify(window.deepvein.session.state.bankLocked??[]));
+  }
+ }
+ checks.push('purchase survives other materials being produced or consumed in bank and pack, but cancels changed target deficits and locked target stock without submitting');
+
  await page.evaluate(()=>{document.querySelector('[data-market-trade]').hidden=true;document.querySelector('[data-market-window]').hidden=true;window.__routes.pending=null;});const execute=root.locator(`[data-action="prefill-action"][data-key="${bronze.id}:0"]`);assert.equal(await page.locator('[data-opt-line]').getAttribute('aria-expanded'),'false');await execute.click();await page.waitForFunction(()=>window.__routes.pending!==null);assert.equal(await page.evaluate(()=>window.__routes.pending.jobId),bronze.id);const count=await root.locator(`[data-execution-action="${bronze.id}:0"] td`).nth(3).textContent();assert.equal(await page.evaluate(()=>window.__routes.amount),Math.ceil(Number(count.replaceAll(',',''))));await page.locator('[data-buddy-hint]').waitFor({state:'hidden'});assert.equal(await page.locator('[data-buddy-hint]').textContent(),'');assert.deepEqual(await page.evaluate(()=>window.__commands),[]);assert.equal(await page.locator('[data-opt-line]').getAttribute('aria-expanded'),'true');assert.equal(await page.locator('[data-amount-any]').isVisible(),true);assert.equal(await page.evaluate(()=>window.__optionToggles),1);assert.equal(await page.evaluate(()=>window.__routes.stopMode),'count');checks.push('execution expands collapsed endless options and fills manufacturing count and rarity without start or queue');
  await page.evaluate(()=>{window.__routes.amount=999;window.__routes.rarity=1;window.__routes.best=true;});await execute.click();assert.equal(await page.evaluate(()=>window.__routes.pending.jobId),bronze.id);assert.equal(await page.evaluate(()=>window.__routes.amount),Math.ceil(Number(count.replaceAll(',',''))));assert.equal(await page.evaluate(()=>window.__routes.rarity),0);assert.equal(await page.evaluate(()=>window.__optionToggles),1);checks.push('already expanded manufacturing options stay open while the existing draft is refilled');
  await page.evaluate(()=>{document.querySelector('[data-stop-mode="time"]').click();document.querySelector('[data-opt-line]').click();});assert.equal(await page.locator('[data-opt-line]').getAttribute('aria-expanded'),'false');await root.locator(`[data-action="prefill-action"][data-key="${gather.id}:0"]`).click();assert.equal(await page.evaluate(()=>window.__routes.pending.jobId),gather.id);assert.deepEqual(await page.evaluate(()=>window.__commands),[]);assert.equal(await page.locator('[data-opt-line]').getAttribute('aria-expanded'),'true');assert.equal(await page.evaluate(()=>window.__routes.stopMode),'count');const gatherCount=await root.locator(`[data-execution-action="${gather.id}:0"] td`).nth(3).textContent();assert.equal(await page.evaluate(()=>window.__routes.amount),Math.ceil(Number(gatherCount.replaceAll(',',''))));checks.push('gathering expands collapsed time options and switches to count while replacing the manufacturing draft without commands');
