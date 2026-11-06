@@ -19,8 +19,8 @@ try{
  const englishDescription=script.match(/^\/\/ @description:en\s+(.+)$/m)?.[1];
  assert.equal(englishDescription,'In-game assistant for mixed crafting and collection orders; syncs character data in real time and summarizes procurement materials and execution plans.');
  assert.doesNotMatch(englishDescription,/prefill|debug/i);
- const readme=await fs.readFile('README.md','utf8');assert.doesNotMatch(readme,/预填|prefill|启用调试功能|Enable debug features/i);
- checks.push('built userscript has ASCII default name, localized names, MIT license, namespace, author, four grants and no public prefill introduction');
+ const readme=await fs.readFile('README.md','utf8');assert.doesNotMatch(readme,/启用调试功能|Enable debug features/i);assert.match(readme,/仅打开游戏菜单并预填草稿，最终由用户确认/);
+ checks.push('built userscript has ASCII default name, localized names, MIT license, namespace, author, four grants, concise metadata and explicit draft-only README guidance');
  const page=await browser.newPage({viewport:{width:1440,height:1080}});page.on('pageerror',e=>errors.push(e.message));
  const root=page.locator('#deepveinidle-buddy'),menu=root.getByRole('menu'),toggle=root.getByRole('menuitemcheckbox');
  const open=()=>root.locator('.titlebar h1').click({button:'right'});

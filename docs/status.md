@@ -1,16 +1,17 @@
 # 当前状态
 
-版本：**0.5.3**。计算基线：**1.0.1211**（对应 `package.json` 与 `vendor/manifest.json`）。线上发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准，历史变更见[更新说明](../CHANGELOG.md)。
+版本：**0.5.4**。计算基线：**1.0.1211**（对应 `package.json` 与 `vendor/manifest.json`）。线上发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准，历史变更见[更新说明](../CHANGELOG.md)。
 
 功能与计算规则统一见[面板规则](panel.md)，模块和上游来源见[技术方案](technical.md)。工作区存档保持 `version=2`，新增字段的兼容与降级限制见[存储与恢复](panel.md#存储与恢复)。
 
-## 待发布变更
+## 当前版本变更
 
-- 整理文档分工，合并重复规则，修正过期描述与引用；不改变代码、存档格式或版本号。
+- 整理文档分工，合并重复规则，修正过期描述与引用。
+- 收藏（制造）的「金属锭展开为矿石」扩展为「展开半成品」：清单增加切割宝石，配套步骤统一显示「配套制造」，装备和工具不展开。沿用原库存、缺口、品质与计算规则及 `expandMetalBars` 存档字段，存档格式不变。
 
 ## 验证与边界
 
-本次仅修改文档：已核对本地版本、存档字段、预填守卫、开发命令与发布工作流，并检查相对链接、章节锚点及差异格式；未运行单元、构建或浏览器测试，未核验线上发布状态。
+半成品展开的验证覆盖宝石库存共享、品质隔离、成本与时间、动作合并、锁定／未知库存、开关恢复，以及装备和工具不展开；浏览器场景覆盖宝石配套步骤和采购显示。发布准备执行锁定依赖安装、单元、构建和完整浏览器门禁；本轮实际结果及线上核验以发布任务摘要为准。
 
 发布门禁与日常入口见[构建与发布](releasing.md#日常入口)。本地结果路径：
 

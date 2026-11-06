@@ -367,3 +367,51 @@ test('collection exposes merged prerequisites by metal and quality while retaini
  const updated=collectionActions(evaluateCollection(w));
  assert.equal(updated[0].count,plan.entries[1].barSteps[0].count);
 });
+
+test('gem shortages share stock once, merge cutting steps and preserve costs, time and intent',()=>{
+ const w=setup();w.expandMetalBars=true;w.character.bank={180:2,100:3,4:10};w.character.pack={180:1};
+ w.character.counts={181:95,184:96};
+ for(const [jobId,itemId]of [[231,181],[234,184]])putLine(w.collectionOrder,{kind:'collection',jobId,itemId,target:100});
+ for(const [id,price]of [[180,10],[100,2],[4,5]])w.prices=quote(w.prices,id,price);
+ const before=workspaceForStorage(w),plan=evaluateCollection(w);
+ assert.deepEqual(plan.entries.map(entry=>entry.barSteps[0].count),[2,4]);
+ assert.deepEqual(plan.rows.map(row=>[row.id,row.required,row.owned,row.produced,row.purchase]),[[4,9,10,0,0],[100,6,3,0,3],[180,9,3,6,0]]);
+ const steps=collectionActions(plan).filter(row=>row.prerequisite);
+ assert.equal(steps.length,1);assert.equal(steps[0].jobId,230);assert.equal(steps[0].count,6);
+ assert.equal(plan.materialCost,87);assert.equal(plan.total,6);
+ assert.equal(plan.collectionSeconds,plan.entries.reduce((sum,entry)=>sum+entry.seconds,0)+steps[0].seconds);
+ assert.deepEqual(workspaceForStorage(w),before);assert.deepEqual(w.character.bank,{180:2,100:3,4:10});
+ w.expandMetalBars=false;
+ const off=evaluateCollection(w);
+ assert.equal(off.actions.some(row=>row.prerequisite),false);assert.equal(off.rows.some(row=>row.id===100),false);
+ assert.equal(off.rows.find(row=>row.id===180).purchase,6);assert.equal(off.points,plan.points);
+});
+
+test('gem expansion matches quality and explicitly blocks locked or unknown stock',()=>{
+ const w=setup();w.expandMetalBars=true;w.character.counts[1181]=95;
+ putLine(w.collectionOrder,{kind:'collection',jobId:231,itemId:1181,target:100});
+ w.character.bank={180:100,1180:2,1100:3,1004:5};
+ const plan=evaluateCollection(w),step=plan.entries[0].barSteps[0];
+ assert.equal(step.tier,1);assert.equal(step.count,3);assert.deepEqual(step.materials,{1100:3});
+ assert.equal(step.status,'ok');assert.equal(plan.total,0);
+ w.character.bank={1180:5};assert.equal(evaluateCollection(w).entries[0].barSteps,undefined);
+ w.character.bankLocked=[1180];
+ const locked=evaluateCollection(w);assert.equal(locked.entries[0].barSteps[0].status,'materialLocked');assert.equal(locked.total,null);
+ w.character.bankLocked=[];w.character.bank=null;
+ const unknown=evaluateCollection(w);assert.equal(unknown.entries[0].barSteps[0].count,null);
+ assert.equal(unknown.entries[0].barSteps[0].status,'unknownInventory');assert.equal(unknown.materialCost,null);assert.equal(unknown.collectionSeconds,null);
+});
+
+test('only the six allowlisted material recipes expand, excluding equipment and tools',async()=>{
+ const {expandBarMaterials}=await import('../src/metal-bars.js');
+ const allowed=new Set([41,42,43,44,45,230]);
+ for(const job of craftingJobs.filter(job=>!job.upgrade))for(const tier of craftingTiers(job)){
+  const itemId=game.recipeOutput(job,tier),materials={[itemId]:2};
+  const result=expandBarMaterials(materials,new Map());
+  if(allowed.has(job.id)){
+   assert.equal(result.steps.length,1);assert.equal(result.steps[0].jobId,job.id);assert.equal(result.steps[0].count,2);
+  }else{
+   assert.deepEqual(result.steps,[],job.name);assert.deepEqual(result.requirements,materials);assert.deepEqual(result.costMaterials,materials);
+  }
+ }
+});

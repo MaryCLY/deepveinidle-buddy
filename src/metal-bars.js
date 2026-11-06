@@ -1,15 +1,18 @@
 import * as game from './engine/upstream.js';
 import {craftingJobs,craftingMaterials,safeAdd} from './engine/crafting-model.js';
 
-const barJobs=new Map(craftingJobs.filter(job=>job.skill==='smithing'&&job.group==='Bars').map(job=>[job.output.itemId,job]));
+// Only bars and cut gems are expandable; equipment and tools remain direct materials.
+const intermediateJobIds=new Set([41,42,43,44,45,230]);
+const intermediateJobs=new Map(craftingJobs.filter(job=>intermediateJobIds.has(job.id)).map(job=>[job.output.itemId,job]));
 
+// Keep the existing bar identifiers alongside the saved preference and action keys.
 export function expandBarMaterials(materials,availableBars){
  const costMaterials={},requirements={...materials},stockUsed={},steps=[];
  for(const [id,qty]of Object.entries(materials)){
-  const itemId=Number(id),job=barJobs.get(game.baseItemId(itemId));
+  const itemId=Number(id),job=intermediateJobs.get(game.baseItemId(itemId));
   if(!job){costMaterials[id]=safeAdd(costMaterials[id]??0,qty);continue;}
   const tier=game.itemTier(itemId);
-  // The current upstream bar recipes yield exactly one bar of the selected quality.
+  // The allowlisted upstream recipes yield exactly one item of the selected quality.
   if(job.output.qty!==1||job.burn||game.recipeOutput(job,tier)!==itemId)throw Error('invalidResult');
   if(availableBars===null){
    steps.push({kind:'craft',jobId:job.id,tier,outputItemId:itemId,count:null,materials:{}});
