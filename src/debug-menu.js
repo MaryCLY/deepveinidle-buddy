@@ -10,7 +10,7 @@ export async function installDebugMenu(root,{platform,key,label,onChange,onError
  const report=error=>{blocked=true;enabled=false;close();onError(error);onChange();};
  function close(){cancelPress();menu.hidden=true;}
  function update(){toggle.textContent=label();toggle.setAttribute('aria-checked',String(enabled));toggle.disabled=busy||blocked;}
- try{enabled=validate(await platform.get(key,true));}catch(error){report(error);}
+ try{enabled=validate(await platform.get(key,false));}catch(error){report(error);}
  function openAt(x,y){
   if(root.host.hasAttribute('data-closed'))return;
   update();menu.hidden=false;menu.style.left='0px';menu.style.top='0px';

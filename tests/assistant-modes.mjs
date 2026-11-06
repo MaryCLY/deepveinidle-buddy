@@ -158,10 +158,10 @@ try{
  await page.waitForFunction(()=>window.raw.collectionOrder.lines.length===0);
  await select('craft');assert.equal(await root.locator('[data-action="clear-collection-plan"]').count(),0);
  checks.push('clear collection plans confirms, includes filtered targets, saves the empty plan and preserves manufacturing orders and settings');
- await mount(raw);await root.locator('.titlebar h1').click({button:'right'});await root.getByRole('menuitemcheckbox').click();assert.equal(await row.locator('[data-action="target-up"]').count(),1);assert.equal(await row.locator('[data-action="prefill-action"]').count(),0);
+ await mount(raw);await root.locator('.titlebar h1').click({button:'right'});await root.getByRole('menuitemcheckbox').click();assert.equal(await row.locator('[data-action="target-up"]').count(),1);assert.equal(await row.locator('[data-action="prefill-action"]').count(),1);
  await row.locator('[data-action="target-down"]').click();assert.match(await row.textContent(),/9 → 10/);await row.locator('[data-action="target-down"]').click();assert.equal(await row.locator('[data-action="target-down"]').isDisabled(),true);
- await select('collection-gather');assert.equal(await root.locator('[data-action="prefill-gather"]').count(),0);assert.equal(await root.locator('#recipe-candidates th').count(),5);
- checks.push('turning debug off hides prefill only, leaves target operations and disables the lower boundary');
+ await select('collection-gather');assert.equal(await root.locator('[data-action="prefill-gather"]').count()>0,true);assert.equal(await root.locator('#recipe-candidates th').count(),6);
+ checks.push('turning debug off preserves craft and gathering prefill controls and target operations');
  const bars=structuredClone(raw);
  bars.orders[0].lines=[{kind:'craft',jobId:51,tier:0,count:2}];
  bars.collectionOrder.lines=[{kind:'collection',itemId:80,jobId:51,target:100}];

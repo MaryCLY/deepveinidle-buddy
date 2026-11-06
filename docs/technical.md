@@ -28,7 +28,7 @@ app 为每次渲染创建包含工作区、只读行情快照及角色计算参�
 
 来源角色身份未知时不读取或写入角色分桶。白名单采样每250ms进行，正常前台变化在1秒内更新；不读取登录凭据、聊天，不增加游戏连接。助手仅主动请求固定公开市场API，禁用凭据。
 
-安装名为DeepVeinIdle-Buddy，namespace为https://dvi-lab.pages.dev，author为Alice。授权仅含unsafeWindow、GM_getValue、GM_setValue、GM_xmlhttpRequest，匹配两个游戏站点。调试功能的公开说明边界见[面板设计](panel.md)。
+安装名为DeepVeinIdle-Buddy，namespace为https://dvi-lab.pages.dev，author为Alice。授权仅含unsafeWindow、GM_getValue、GM_setValue、GM_xmlhttpRequest，匹配两个游戏站点。调试开关及预填功能边界见[面板设计](panel.md)。
 
 入口在 `document-start` 优先使用 `unsafeWindow`，该变量未定义时使用 `window`。回退要求脚本运行在页面主世界，并由脚本管理器提供上述三个 GM API。隔离世界中的 `window` 无法读取页面的 `deepvein` 或监听游戏创建的 WebSocket。游戏可能在脚本启动后才设置 `deepvein`，因此入口不以它是否存在来选择窗口。
 

@@ -1,6 +1,6 @@
 # 当前状态
 
-版本：**0.5.2**。计算基线：**1.0.1211**。发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准；历史变更见[更新说明](../CHANGELOG.md)。
+版本：**0.5.3**。计算基线：**1.0.1211**。发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准；历史变更见[更新说明](../CHANGELOG.md)。
 
 ## 功能范围
 
@@ -16,7 +16,7 @@
 - 收藏（制造）新增金属锭展开开关，位于顶部「材料」左侧，按角色保存。固定计划先抵扣同品质可用锭库存，再展开缺口；采购产物值计入配套炼锭，执行计划按金属和品质合并步骤。配方表沿用原配方口径。
 - 每次渲染共享行情快照和角色计算参数。预填点击时生成一次待填请求，等待期间刷新角色；购买按最新完整计划重算目标请求并比较，执行比较完整输入签名。其他材料变化但不影响目标购买数量和单价时不再取消购买预填。
 
-- 调试功能临时默认开启，仅影响未保存站点偏好的情况；保留显式关闭、非法偏好关闭和错误显示，仍仅预填草稿。
+- 购买／执行辅助始终启用，与调试开关完全解耦；调试开关保留供以后使用，默认关闭，仍保存站点偏好并显示错误。预填仍受实时来源、角色、计划及模式变化保护。
 
 ## 验证与边界
 

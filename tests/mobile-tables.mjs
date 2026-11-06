@@ -6,8 +6,6 @@ const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,
 page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
 await fs.mkdir('.test-artifacts/mobile-tables',{recursive:true});
 try{
- // Exercise compact rows with the saved disabled preference.
- await page.addInitScript(()=>{if(localStorage.getItem('dvi-buddy-demo-debug-v1')===null)localStorage.setItem('dvi-buddy-demo-debug-v1','false');});
  await page.goto(baseUrl);await page.locator('[data-buddy-launcher]').click();await page.locator('#deepveinidle-buddy').locator('[data-action="mode-craft"]').click();
  await page.evaluate(async()=>{const {installMobileFixture}=await import('/tests/mobile-fixture.js');installMobileFixture();});
  const root=page.locator('#deepveinidle-buddy');await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').hasAttribute('data-mobile'));
@@ -60,7 +58,7 @@ try{
   const r=el.shadowRoot,table=r.querySelector('#execution-actions'),input=r.querySelector('#recipe-candidates input')??r.querySelector('.order-details input[type=number]');
   return {rows:[...table.querySelectorAll('tbody tr')].filter(n=>!n.querySelector('[colspan]')).map(n=>({height:n.getBoundingClientRect().height,nameHeight:n.querySelector('.item-name')?.getBoundingClientRect().height??0})),input:getComputedStyle(input).fontSize,control:input.getBoundingClientRect().height,checkbox:r.querySelector('#order-list input[type=checkbox]').getBoundingClientRect().height,buttons:table.querySelectorAll('tbody button').length,titles:table.querySelectorAll('tr[title]').length};
  });
- assert.ok(density.rows.length>0);for(const row of density.rows)assert.ok(row.height<=(row.nameHeight<20?30:42),JSON.stringify(density));assert.equal(density.input,'16px');assert.equal(density.control,32);assert.equal(density.checkbox,32);assert.equal(density.buttons,0);assert.ok(density.titles>0);checks.push('single-line display rows fit 30px, inline inputs/checkboxes use 32px, input text stays 16px and execution rows need no status control');
+ assert.ok(density.rows.length>0);for(const row of density.rows)assert.ok(row.height<=42,JSON.stringify(density));assert.equal(density.input,'16px');assert.equal(density.control,32);assert.equal(density.checkbox,32);assert.equal(density.buttons,density.rows.length);assert.ok(density.titles>0);checks.push('rows with prefill buttons fit 42px, inline inputs/checkboxes use 32px, input text stays 16px and execution rows need no status control');
  const label=root.locator('#execution-actions .item-name').first();
  await label.evaluate(n=>{n.textContent='A very long item name with all details preserved and visible when focused';});
  const collapsed=await label.evaluate(n=>n.getBoundingClientRect().height);await label.tap();assert.ok(await label.evaluate(n=>n.getBoundingClientRect().height)>collapsed);await root.locator('h1').tap();assert.equal(await label.evaluate(n=>n.getBoundingClientRect().height),collapsed);checks.push('long frozen names clamp to two lines and reveal complete text on focus without widening the column');
