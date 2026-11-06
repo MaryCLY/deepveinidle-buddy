@@ -2,6 +2,7 @@
 
 ## 文档分工
 
+- [README.md](README.md)：安装、使用与开发入口；[CHANGELOG.md](CHANGELOG.md)：各版本历史变更。
 - [DESIGN.md](DESIGN.md)：设计索引；[面板规则](docs/panel.md)：功能、交互、计算与验收；[技术方案](docs/technical.md)：模块、上游来源与生成流程。
 - [当前状态](docs/status.md)：当前基线、待发布变更与验证状态；[发布流程](docs/releasing.md)：构建、发布与失败恢复。
 - `AGENTS.md`：协作规则，不重复产品需求和操作细节。

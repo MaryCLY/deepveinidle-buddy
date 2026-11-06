@@ -43,8 +43,8 @@ https://github.com/yukixz/deepveinidle-buddy/releases/latest/download/deepveinid
 
 核验比较@version与元数据块之后的脚本主体，兼容Greasy Fork重写元数据。
 
-验收产物按workflow run ID命名并保留14天。重跑失败的发布作业可复用同次run的产物；重跑全部作业会重新验证并替换临时产物，过期后也需重新验证，正式Release附件不受影响。
+CI 构建产物按 workflow run ID 命名并保留14天，浏览器诊断按 run ID 与 attempt 命名并保留7天。重跑失败的发布作业可复用同次run的产物；重跑全部作业会重新验证并替换临时产物，过期后也需重新验证，正式Release附件不受影响。
 
-需要手动操作时，更新版本和说明并完成验证，提交推送main，再为该提交创建并推送正式tag；也可手动运行Release工作流并选择已有tag。无需另建空Release。
+日常使用统一入口；排障需手动发布时仍须获得授权、更新版本与说明并完成全部门禁，再提交推送 main 及正式 tag，或手动运行 Release 工作流选择已有 tag。无需另建空 Release。
 
-发布测试使用隔离命令、客户端与HTTP夹具，禁止测试向真实服务写入；真实环境验证边界见[当前状态](status.md#验证边界)。
+发布测试使用隔离命令、客户端与HTTP夹具，禁止测试向真实服务写入；真实环境验证边界见[当前状态](status.md#验证与边界)。
