@@ -10,6 +10,8 @@ try{
  // Deterministic visual viewport changes exercise keyboard code paths, not OS keyboards.
  await context.addInitScript(()=>{const v=new EventTarget();Object.assign(v,{offsetTop:0,offsetLeft:0,scale:1,testHeight:null,testWidth:null});Object.defineProperties(v,{width:{get:()=>v.testWidth??innerWidth},height:{get:()=>v.testHeight??innerHeight}});Object.defineProperty(window,'visualViewport',{value:v,configurable:true});});
  page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
+ // Exercise the saved disabled preference.
+ await page.addInitScript(()=>{if(localStorage.getItem('dvi-buddy-demo-debug-v1')===null)localStorage.setItem('dvi-buddy-demo-debug-v1','false');});
  await page.goto(baseUrl);await page.locator("[data-buddy-launcher]").click();await page.locator('#deepveinidle-buddy').locator('[data-action="mode-collection-craft"]').click();const root=page.locator('#deepveinidle-buddy');await root.locator('.resize-right').waitFor();
  await root.locator('.resize-right').focus();await page.keyboard.press('ArrowLeft');await page.waitForFunction(()=>localStorage.getItem('dvi-buddy-demo-geometry-v1')!==null);
  const desktop=await root.boundingBox(),saved=await page.evaluate(()=>localStorage.getItem('dvi-buddy-demo-geometry-v1'));
@@ -54,7 +56,7 @@ try{
  await chat.evaluate(el=>{const exit=document.createElement('button');exit.dataset.mExit='';exit.dataset.mFixtureExit='';el.parentElement.append(exit);});await page.waitForFunction(()=>document.querySelector('[data-buddy-launcher]').getBoundingClientRect().bottom+8<=document.querySelector('[data-m-exit]').getBoundingClientRect().top);
  await page.locator('[data-m-exit]').evaluate(el=>el.remove());await chat.evaluate(el=>{el.hidden=true;});assert.equal(await launcher.isVisible(),true);await chat.evaluate(el=>{el.hidden=false;const replacement=el.cloneNode(true);el.replaceWith(replacement);});await page.waitForFunction(()=>document.querySelectorAll('[data-buddy-launcher]').length===1);checks.push('launcher avoids existing game buttons and survives hidden or replaced chat anchors');
  await page.evaluate(()=>document.documentElement.lang='en');await launcher.getAttribute('aria-label').then(value=>assert.equal(value,'Crafting & Mastery Buddy'));await page.evaluate(()=>document.documentElement.lang='zh-CN');checks.push('mobile launcher follows game language independently of the hidden desktop navigation');
- await longPressTitle(root);await root.getByRole('menuitemcheckbox').tap();assert.equal(await root.locator('#execution-actions th').count(),7);await longPressTitle(root);await root.getByRole('menuitemcheckbox').tap();checks.push('long-press title shares the existing debug toggle and preserves the default hidden action columns');
+ await longPressTitle(root);await root.getByRole('menuitemcheckbox').tap();assert.equal(await root.locator('#execution-actions th').count(),7);await longPressTitle(root);await root.getByRole('menuitemcheckbox').tap();checks.push('long-press title shares the existing debug toggle and preserves the saved disabled preference');
  assert.equal(await root.locator('[data-action="action-status"],.action-status-details').count(),0);assert.ok(await root.locator('#execution-actions tr[title]').count()>0);checks.push('execution rows share material colors and title explanations without a mobile status control');
  await root.locator('[data-action="mode-craft"]').tap();await root.locator('#orders > summary').tap();await root.locator('[data-action="edit-order"]').first().tap();
 

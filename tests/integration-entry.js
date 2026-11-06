@@ -4,7 +4,8 @@ import {gatheringSkills} from '../src/engine/gathering-model.js';import * as gam
 import {defaults} from '../src/workspace.js';import {createGameSync,installGameSync,readClient} from '../src/game-sync.js';import {createGamePrefill} from '../src/game-prefill.js';
 window.buddyTest={defaults,createGameSync,createGamePrefill};
 const initial=defaults();initial.orders[0].lines=window.__testLines;initial.collectionOrder.lines=window.__testLines.filter(line=>line.kind==='collection'&&!gatheringSkills.includes(game.recipes.find(job=>job.id===line.jobId)?.skill));initial.autoRemove=false;if(window.__testPrices)initial.prices=window.__testPrices;
-const values=new Map();window.__writes=[];
+// Exercise prefill guards with an explicitly disabled site preference.
+const values=new Map([['dvi-buddy-debug-v1:'+location.host,false]]);window.__writes=[];
 const platform={get:async(k,v)=>values.get(k)??v,set:async(k,v)=>{values.set(k,v);window.__writes.push(v);},market:()=>Promise.reject(Error('disabled in fixture'))};
 const integration=createGamePrefill(window,{wait:ms=>window.__wait?window.__wait(ms):new Promise(resolve=>setTimeout(resolve,ms))});
 const host=document.createElement('div');host.id='deepveinidle-buddy';document.body.append(host);

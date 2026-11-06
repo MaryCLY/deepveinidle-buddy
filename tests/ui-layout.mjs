@@ -7,6 +7,8 @@ page.on('pageerror',error=>errors.push(error.message));
 const root=page.locator('#deepveinidle-buddy');
 await fs.mkdir('.test-artifacts/ui-layout',{recursive:true});
 try{
+ // Exercise the saved disabled preference.
+ await page.addInitScript(()=>{if(localStorage.getItem('dvi-buddy-demo-debug-v1')===null)localStorage.setItem('dvi-buddy-demo-debug-v1','false');});
  await page.goto(baseUrl);await page.locator('[data-buddy-launcher]').click();
  assert.deepEqual(await root.locator('.titlebar button').evaluateAll(els=>els.map(el=>el.dataset.action)),['close']);
  assert.doesNotMatch(await root.locator('.titlebar').textContent(),/游戏版本|角色实时|市场行情/);

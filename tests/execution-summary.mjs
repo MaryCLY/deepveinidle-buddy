@@ -10,6 +10,8 @@ const checks=[],errors=[];
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1080}});await prepareDemo(page);page.on('pageerror',e=>errors.push(e.message));
  const root=page.locator('#deepveinidle-buddy');
+ // Exercise the saved disabled preference.
+ await page.addInitScript(()=>{if(localStorage.getItem('dvi-buddy-demo-debug-v1')===null)localStorage.setItem('dvi-buddy-demo-debug-v1','false');});
  await page.goto(baseUrl);await page.locator("[data-buddy-launcher]").click();await page.locator('#deepveinidle-buddy').locator('[data-action="mode-craft"]').click();await root.locator('.summary').waitFor();
  await root.locator('[data-action="mode-collection-craft"]').click();await page.waitForFunction(()=>localStorage.getItem('dvi-buddy-demo-v1')!==null);
  const base=await readDemoWorkspace(page);
