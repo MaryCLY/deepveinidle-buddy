@@ -200,8 +200,14 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
     refreshForPrefill();
     const context=calculationContext();
     const request=action==='prefill-purchase'?purchaseRequest(Number(el.dataset.item),context):action==='prefill-gather'?gatherRequest(el.dataset.key,context):actionRequest(el.dataset.key,context);
-    const signature=prefillSignature(request),generation=debugGeneration,operationMode=modeGeneration;
-    const guard=()=>{try{refreshForPrefill();return debug.enabled&&debugGeneration===generation&&modeGeneration===operationMode&&live&&latestEnvelope?.source==='client'&&prefillSignature(request)===signature;}catch{return false;}};
+    const purchasing=action==='prefill-purchase',signature=purchasing?JSON.stringify(request):prefillSignature(request),generation=debugGeneration,operationMode=modeGeneration;
+    const guard=()=>{try{
+     refreshForPrefill();
+     if(!debug.enabled||debugGeneration!==generation||modeGeneration!==operationMode||!live||latestEnvelope?.source!=='client')return false;
+     // Other materials may change while navigating; only cancel if this purchase changes.
+     const latestSignature=purchasing?JSON.stringify(purchaseRequest(request.itemId,calculationContext())):prefillSignature(request);
+     return latestSignature===signature;
+    }catch{return false;}};
     prefillBusy=true;onPrefillFeedback(text('正在预填，请稍候','Prefill in progress'));render();
     try{await gameIntegration[action==='prefill-purchase'?'purchase':'action'](request,guard);if(!guard())throw Error('planChanged');if(mobileMode(doc))closed=true;if(!disposed)onPrefillFeedback('');}
     finally{prefillBusy=false;render();}return;
