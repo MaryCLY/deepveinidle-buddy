@@ -5,7 +5,7 @@ import {importWorkConfig} from './work-import.js';
 
 export const craftingSkills=['cooking','smithing','fletching','herblore','crafting'];
 export const craftingToolSlots={cooking:'pan',smithing:'hammer',fletching:'knife',herblore:'mortar',crafting:'needle'};
-export const craftingSlots=Object.values(craftingToolSlots);
+export const craftingSlots=[...Object.values(craftingToolSlots),'shield'];
 export const craftingJobs=[...game.recipes.filter(r=>craftingSkills.includes(r.skill)&&!r.retired),...game.upgradeRecipes.map(upgrade=>({id:'upgrade-'+upgrade.id,name:upgrade.name,skill:upgrade.skill,group:'Upgrades',levelReq:upgrade.levelReq,xp:upgrade.xp,upgrade,output:{itemId:upgrade.to[0],qty:1}}))];
 const craftingPotions=[];
 export const craftingRooms=game.rooms.filter(r=>r.bonus.kind==='craftSpeed'&&craftingSkills.includes(r.bonus.skill));

@@ -4,14 +4,14 @@ import {createWorkPlayer} from './work-player.js';
 
 export const gatheringSkills=['mining','fishing','woodcutting','thieving'];
 export const toolSlots={mining:'pickaxe',fishing:'rod',woodcutting:'axe',thieving:'gloves'};
-export const gatheringSlots=[...Object.values(toolSlots),'amulet'];
+export const gatheringSlots=[...Object.values(toolSlots),'amulet','shield'];
 const gatheringPotions=game.potions.filter(p=>p.kind==='hunter');
 export const gatheringRooms=game.rooms.filter(r=>r.bonus.kind==='rareChance'||r.bonus.kind==='gatherSpeed'&&gatheringSkills.includes(r.bonus.skill));
 export const gatheringMasteries=game.masteries.filter(m=>['gather','rare'].includes(m.id));
 export const gatheringPerks=game.perks.filter(p=>['quick','hands'].includes(p.id));
 const integer=(v,min,max,fallback=min)=>Number.isFinite(Number(v))?Math.min(max,Math.max(min,Math.floor(Number(v)))):fallback;
-export const slotItems=slot=>slot==='amulet'?game.equipment.filter(g=>g.slot===slot):game.tools.filter(g=>g.slot===slot);
-export const gatheringGear=(slot,id)=>slot==='amulet'?game.gear(id):game.tool(id);
+export const slotItems=slot=>['amulet','shield'].includes(slot)?game.equipment.filter(g=>g.slot===slot):game.tools.filter(g=>g.slot===slot);
+export const gatheringGear=(slot,id)=>['amulet','shield'].includes(slot)?game.gear(id):game.tool(id);
 export function gatheringDefaults(){return {
  levels:Object.fromEntries(gatheringSkills.map(k=>[k,1])),
  gear:Object.fromEntries(gatheringSlots.map(k=>[k,{id:0,tier:0,plus:0}])),

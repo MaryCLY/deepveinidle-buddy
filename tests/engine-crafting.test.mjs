@@ -5,7 +5,7 @@ import {craftingDefaults,craftingTiers,normalizeCrafting,craftingJobs,craftingSk
 
 const first=skill=>craftingJobs.find(j=>j.skill===skill);
 test('five crafting skills use independent work tools and character inputs',()=>{
- assert.deepEqual(craftingSkills.map(s=>craftingJobs.filter(j=>j.skill===s).length),[8,66,38,8,74]);
+ assert.deepEqual(craftingSkills.map(s=>craftingJobs.filter(j=>j.skill===s).length),[8,71,40,8,77]);
  const d=craftingDefaults(),s=normalizeCrafting({...d,levels:{smithing:50},gear:{hammer:{id:365,tier:3,plus:5}}}),p=craftingPlayer(s).player;
  assert.equal(p.skills.smithing,game.levelXp(50));assert.equal(p.equipment.hammer,game.encode(game.withRarity(365,3),5));assert.equal(d.levels.cooking,1);
  assert.deepEqual(craftingMaterials(first('smithing'),0,10),{1:10,2:10});assert.deepEqual(craftingMaterials(first('smithing'),1,4),{1001:4,1002:4});

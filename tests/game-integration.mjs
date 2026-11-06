@@ -13,6 +13,13 @@ let page;try{
  await page.addScriptTag({type:'module',url:baseUrl+'/.test-artifacts/game-integration/harness.js'});await page.waitForFunction(()=>window.__panel?.getWorkspace().character.initialized);await page.locator('[data-buddy-launcher]').click();const root=page.locator('#deepveinidle-buddy');assert.ok((await root.locator('.status').textContent()).includes('角色'));checks.push('late attachment reads the current client without a welcome frame or extra socket');
  await page.waitForTimeout(1200);const writesBefore=await page.evaluate(()=>{window.__stableNode=document.querySelector('#deepveinidle-buddy').shadowRoot.querySelector('#search');window.__tickTimer=setInterval(()=>{window.deepvein.session.state.lastTick++;window.deepvein.session.tick++;},300);return window.__writes.length;});await page.waitForTimeout(1100);assert.equal(await page.evaluate(()=>window.__writes.length),writesBefore);assert.equal(await page.evaluate(()=>{clearInterval(window.__tickTimer);return window.__stableNode===document.querySelector('#deepveinidle-buddy').shadowRoot.querySelector('#search');}),true);checks.push('unchanged client reads neither save again nor rebuild the panel');
  assert.equal(await page.evaluate(()=>window.__writes.length),0);checks.push('initial and ongoing character synchronization never writes user storage');
+ const updatedGear={shield:game.encode(game.withRarity(721,3),10),hammer:game.withRarity(699,2)};
+ await page.evaluate(gear=>Object.assign(window.deepvein.session.state.equipment,gear),updatedGear);
+ await page.waitForFunction(()=>{const gear=window.__panel.getWorkspace().character.config.gear;return gear.shield.id===721&&gear.shield.tier===3&&gear.shield.plus===10&&gear.hammer.id===699&&gear.hammer.tier===2;});
+ assert.equal(await page.evaluate(()=>window.__writes.length),0);
+ await page.evaluate(()=>Object.assign(window.deepvein.session.state.equipment,{shield:null,hammer:null}));
+ await page.waitForFunction(()=>window.__panel.getWorkspace().character.config.gear.shield.id===0&&window.__panel.getWorkspace().character.config.gear.hammer.id===0);
+ checks.push('1.0.1212 boss tool and enhanced skill offhand synchronize and clear without storage writes');
  await root.locator('#global-product-price-mode').selectOption('ask');await page.waitForFunction(()=>window.__writes.some(value=>value?.orders));
  const storedWorkspaces=await page.evaluate(()=>window.__writes.filter(value=>value?.orders));for(const stored of storedWorkspaces){assert.equal(stored.version,2);assert.equal(Object.hasOwn(stored,'prices'),false);assert.equal(Object.hasOwn(stored,'character'),false);}checks.push('user settings persist without character or market observations');
 
