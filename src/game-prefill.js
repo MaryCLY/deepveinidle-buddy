@@ -2,6 +2,8 @@ import {marketPriceLimit} from './engine/upstream.js';
 import {mobileMode,mobilePageIs} from './mobile-layout.js';
 import {characterRole} from './game-sync.js';
 const failure=code=>{throw Error(code);};
+// Market text fields repaint integers with comma grouping on blur.
+const matchesTradeValue=(value,expected)=>value===String(expected)||value===expected.toLocaleString('en-US');
 export function createGamePrefill(page,{doc=document,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
  let busy=false,disposed=false;
  const visible=el=>el&&el.isConnected&&!el.closest('[hidden]')&&el.getBoundingClientRect().width>0&&el.getBoundingClientRect().height>0;
@@ -57,7 +59,9 @@ export function createGamePrefill(page,{doc=document,wait=ms=>new Promise(resolv
     input('[data-trade-qty-in]',request.quantity);input('[data-trade-price-in]',request.price);
     const price=required('[data-trade-price-in]');price.focus();price.blur();
     await wait(0);check();
-    if(actual()!==request.itemId||Number(required('[data-trade-qty-in]').value)!==request.quantity||Number(required('[data-trade-price-in]').value)!==request.price)failure('gamePrefillMismatch');
+    if(actual()!==request.itemId||
+     !matchesTradeValue(required('[data-trade-qty-in]').value,request.quantity)||
+     !matchesTradeValue(required('[data-trade-price-in]').value,request.price))failure('gamePrefillMismatch');
     required('[data-trade-qty-in]').focus();
    });
   },
