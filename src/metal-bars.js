@@ -8,7 +8,7 @@ export const intermediateJob=itemId=>intermediateJobs.get(game.baseItemId(itemId
 
 // Keep the existing bar identifiers alongside the saved preference and action keys.
 export function expandBarMaterials(materials,availableBars,pricing){
- const costMaterials={},requirements={...materials},stockUsed={},steps=[];
+ const costMaterials={},requirements={...materials},stockUsed={},steps=[],unpricedRoutes=[];
  let issue=null;
  for(const [id,qty]of Object.entries(materials)){
   const itemId=Number(id),job=intermediateJob(itemId);
@@ -26,6 +26,8 @@ export function expandBarMaterials(materials,availableBars,pricing){
   const route=pricing.get(itemId);
   if(route.price===null){
    issue='missingIntermediatePrice';
+   const possibleInputs=route.unitSeconds===null?{}:craftingMaterials(job,tier,1);
+   unpricedRoutes.push({itemId,inputIds:Object.keys(possibleInputs).map(Number)});
    continue;
   }
   if(!route.craft){
@@ -39,5 +41,5 @@ export function expandBarMaterials(materials,availableBars,pricing){
    requirements[input]=safeAdd(requirements[input]??0,amount);
   }
  }
- return {costMaterials,requirements,stockUsed,steps,issue};
+ return {costMaterials,requirements,stockUsed,steps,issue,unpricedRoutes};
 }

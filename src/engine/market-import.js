@@ -12,7 +12,7 @@ export function parseMarketPrices(raw){
   const quote={};
   for(const [side,field,quantityField]of [['ask','lowestSell','sellQty'],['bid','highestBuy','buyQty']]){
    const value=item[field];
-   quote[side]=value===null||validPrice(value)&&value>0?{value,capturedAt:at}:{invalid:true,capturedAt:at};
+   quote[side]=value===null||validPrice(value)?{value,capturedAt:at}:{invalid:true,capturedAt:at};
    const quantity=item[quantityField];
    if(Number.isSafeInteger(quantity)&&quantity>=0)quote[side].quantity=quantity;
    else quote[side].quantityInvalid=true;

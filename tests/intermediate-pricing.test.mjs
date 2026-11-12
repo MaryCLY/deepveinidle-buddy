@@ -42,3 +42,22 @@ test('missing both route prices preserves demand and blocks speculative actions'
  assert.equal(plan.materialCost,null);assert.equal(plan.collectionSeconds,null);assert.equal(bar.required,10);
  assert.equal(plan.entries[0].status,'missingIntermediatePrice');assert.equal(plan.actions.some(row=>row.prerequisite),false);
 });
+test('a missing intermediate quote affects only that route and its potentially shared inputs',()=>{
+ const w=defaults();
+ Object.assign(w.character,{initialized:true,worldTick:1000000,bank:{},pack:{},counts:{80:95,181:95,40:95}});
+ for(const skill in w.character.config.levels)w.character.config.levels[skill]=100;
+ for(const [id,value]of [[4,5],[180,10],[100,20],[1,2]])w.prices.quotes[id]={ask:{value,capturedAt:1}};
+ w.expandMetalBars=true;w.orders=[w.collectionOrder];
+ for(const [itemId,jobId]of [[80,51],[181,231],[40,41]])putLine(w.collectionOrder,{kind:'collection',itemId,jobId,target:100});
+ const prices=createPriceSnapshot(w.prices);
+ const plan=estimateOrders(w,prices),direct=estimateOrders({...w,expandMetalBars:false},prices);
+ const row=id=>plan.rows.find(row=>row.id===id);
+ assert.equal(plan.points,direct.points);
+ assert.equal(row(180).purchase,5);assert.equal(row(180).cost,50);
+ assert.equal(row(4).purchase,5);assert.equal(row(4).cost,25);
+ assert.equal(row(40).required,10);assert.equal(row(40).purchase,null);
+ assert.equal(row(1).required,null);assert.equal(row(1).purchase,null);
+ assert.equal(plan.entries[0].products,undefined);
+ assert.equal(plan.subtotal,75);
+ assert.equal(plan.total,null);assert.equal(plan.collectionSeconds,null);
+});

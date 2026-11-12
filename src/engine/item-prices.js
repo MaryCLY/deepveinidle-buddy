@@ -23,7 +23,7 @@ function validateQuotes(raw){
   if(String(id)!==key||!validItemId(id)||!itemFamily(id)||!record(q)||!Object.keys(q).length||Object.keys(q).some(side=>!['ask','bid'].includes(side)))throw Error('invalidMarketData');
   const entry={};
   for(const [side,v]of Object.entries(q)){
-   if(!record(v)||!time(v.capturedAt)||!(v.invalid===true||v.value===null||validPrice(v.value)&&v.value>0)||Object.keys(v).some(k=>!['invalid','value','capturedAt','quantityInvalid','quantity'].includes(k)))throw Error('invalidMarketData');
+   if(!record(v)||!time(v.capturedAt)||!(v.invalid===true||v.value===null||validPrice(v.value))||Object.keys(v).some(k=>!['invalid','value','capturedAt','quantityInvalid','quantity'].includes(k)))throw Error('invalidMarketData');
    entry[side]=v.invalid===true?{invalid:true,capturedAt:v.capturedAt}:{value:v.value,capturedAt:v.capturedAt};
    if(v.quantityInvalid===true)entry[side].quantityInvalid=true;
    else if(Object.hasOwn(v,'quantity')){if(!Number.isSafeInteger(v.quantity)||v.quantity<0)throw Error('invalidMarketData');entry[side].quantity=v.quantity;}

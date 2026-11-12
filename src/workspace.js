@@ -142,12 +142,13 @@ export function estimateOrders(workspace,prices,players=collectionPlayers(worksp
  const expandMetalBars=workspace.expandMetalBars&&selected.length===1&&selected[0].id===workspace.collectionOrder?.id;
  if(expandMetalBars)pricing??=createIntermediatePricing(state,prices,players);
  const prerequisiteProducts=new Map();
+ const uncertainOutputs=new Set(),uncertainRequirements=new Set();
  const availableBars=expandMetalBars&&state.bank!==null&&state.pack!==null?new Map():null;
  if(availableBars)for(const inventory of [state.bank,state.pack])for(const [id,qty]of Object.entries(inventory)){
   const itemId=Number(id);
   if(!state.bankLocked.includes(itemId))availableBars.set(itemId,add(availableBars.get(itemId)??0,qty));
  }
- const entries=[],orders=[];let blocked=0,points=0,craftSeconds=0,collectionSeconds=0;
+ const entries=[],orders=[];let blocked=0,globallyBlocked=false,points=0,craftSeconds=0,collectionSeconds=0;
  const materialAdd=(map,id,qty)=>map.set(Number(id),add(map.get(Number(id))??0,qty));
  for(const order of selected){
   const own=new Map();let ownBlocked=false,ownSeconds=0,ownMaterialsUnknown=false;
@@ -176,13 +177,20 @@ export function estimateOrders(workspace,prices,players=collectionPlayers(worksp
     if(expanded.issue)ownMaterialsUnknown=true;
     if(expanded.steps.length)entry.barSteps=expanded.steps.map(step=>({...step,prerequisite:true}));
     const timing=expanded.issue?{status:expanded.issue,seconds:null}:withBarTime(entry,expanded.steps);
+    for(const route of expanded.unpricedRoutes??[]){
+     uncertainOutputs.add(route.itemId);
+     for(const id of route.inputIds)uncertainRequirements.add(id);
+    }
     if(!['ok','complete'].includes(timing.status)){
+     if(timing.status!=='missingIntermediatePrice')globallyBlocked=true;
      blocked++;ownBlocked=true;if(line.kind==='collection'&&entry.status!=='ok')ownMaterialsUnknown=true;
     }
     if(entry.status==='ok'){
      const job=craftingJobs.find(j=>j.id===line.jobId)??game.recipes.find(j=>j.id===line.jobId);
-     entry.products=plannedProducts(job,tier,line.kind==='craft'?line.count:entry.attempts,players);
-     for(const [id,qty]of Object.entries(entry.products))materialAdd(products,id,qty);
+     if(timing.status==='ok'){
+      entry.products=plannedProducts(job,tier,line.kind==='craft'?line.count:entry.attempts,players);
+      for(const [id,qty]of Object.entries(entry.products))materialAdd(products,id,qty);
+     }
      for(const step of expanded.steps)if(step.status==='ok')materialAdd(prerequisiteProducts,step.outputItemId,step.count);
      if(line.kind==='collection')points=add(points,entry.points);
      if(timing.status==='ok'){
@@ -198,7 +206,7 @@ export function estimateOrders(workspace,prices,players=collectionPlayers(worksp
      for(const [id,qty]of Object.entries(expanded.stockUsed))availableBars.set(Number(id),availableBars.get(Number(id))-qty);
     }
     if(expanded.issue){entry.status=expanded.issue;entry.seconds=null;}
-   }catch(error){entry.status=error.message;blocked++;ownBlocked=true;ownMaterialsUnknown=true;}
+   }catch(error){entry.status=error.message;blocked++;globallyBlocked=true;ownBlocked=true;ownMaterialsUnknown=true;}
    entries.push(entry);
   }
   let materialValue=0,unknown=false;
@@ -212,11 +220,11 @@ export function estimateOrders(workspace,prices,players=collectionPlayers(worksp
  }
  let subtotal=0,missingPrices=0,unknownInventory=false;
  const rows=[...materials].sort((a,b)=>a[0]-b[0]).map(([id,exact])=>{
-  const required=Math.ceil(exact);if(!quantity(required))throw Error('quantityOverflow');
+  const required=uncertainRequirements.has(id)?null:Math.ceil(exact);if(required!==null&&!quantity(required))throw Error('quantityOverflow');
   const owned=state.bank===null||state.pack===null?null:state.bankLocked.includes(id)?0:add(state.bank[id]??0,state.pack[id]??0);
   const independentProducts=products.get(id)??0,prerequisiteCount=prerequisiteProducts.get(id)??0;
-  const produced=blocked?null:state.bankLocked.includes(id)?0:add(independentProducts,prerequisiteCount);
-  const purchase=owned===null||produced===null?null:Math.ceil(Math.max(0,required-owned-produced));
+  const produced=globallyBlocked||uncertainOutputs.has(id)?null:state.bankLocked.includes(id)?0:add(independentProducts,prerequisiteCount);
+  const purchase=required===null||owned===null||produced===null?null:Math.ceil(Math.max(0,required-owned-produced));
   const quote=collectionPrice(id,prices,state.buyMode);
   if(owned===null)unknownInventory=true;if(purchase>0&&quote.price===null)missingPrices++;
   const cost=purchase===0?0:purchase===null||quote.price===null?null:purchase*quote.price;
@@ -229,7 +237,7 @@ export function estimateOrders(workspace,prices,players=collectionPlayers(worksp
   return row;
  });
  const materialCost=orders.some(order=>order.materialValue===null)?null:orders.reduce((sum,order)=>add(sum,order.materialValue),0);
- return {entries,orders,rows,materialCost,actions:summarizeExecutionActions(entries,state,blocked===0&&state.bank!==null&&state.pack!==null),blocked,conflicts:[...conflicts],points:blocked?null:points,craftSeconds:entries.some(e=>e.kind==='craft'&&e.status!=='ok')?null:craftSeconds,collectionSeconds:entries.some(e=>e.kind==='collection'&&(!['ok','complete'].includes(e.status)||e.barSteps?.some(step=>step.status!=='ok')))?null:collectionSeconds,missingPrices,unknownInventory,subtotal,total:blocked||missingPrices||unknownInventory?null:subtotal};
+ return {entries,orders,rows,materialCost,actions:summarizeExecutionActions(entries,state,blocked===0&&state.bank!==null&&state.pack!==null),blocked,conflicts:[...conflicts],points:globallyBlocked?null:points,craftSeconds:entries.some(e=>e.kind==='craft'&&e.status!=='ok')?null:craftSeconds,collectionSeconds:entries.some(e=>e.kind==='collection'&&(!['ok','complete'].includes(e.status)||e.barSteps?.some(step=>step.status!=='ok')))?null:collectionSeconds,missingPrices,unknownInventory,subtotal,total:blocked||missingPrices||unknownInventory?null:subtotal};
 }
 // Editable collection rows retain intent identity, including completed/blocked targets.
 export function collectionActions(plan){
