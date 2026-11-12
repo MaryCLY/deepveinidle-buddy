@@ -57,3 +57,27 @@ test('sync observes bound page edits and active page swaps while ignoring unrela
  assert.deepEqual(out.map(event=>event.snapshot.player.masteryAway),[{2:{gather:20}},{2:{gather:30}},{1:{craft:10}}]);
  sync.dispose();
 });
+
+test('partial mastery pages retain the role, fall back only to its server snapshot and recover',()=>{
+ const page=fixture(),player=page.deepvein.session.state,out=[];
+ const server=readClient(page).snapshot;
+ const sync=createGameSync(page,event=>out.push(event));
+ Object.assign(player,{masteryPage:1,masteryAway:{2:{craft:106}}});
+ sync.sample();
+ assert.equal(out.at(-1).status,'error');
+ assert.equal(out.at(-1).role,'42');
+ assert.equal(out.at(-1).error,'incompleteSnapshot');
+ sync.receive({role:'42',status:'live',snapshot:server});
+ assert.equal(out.at(-1).source,'server');
+ assert.deepEqual(out.at(-1).snapshot,server);
+ assert.equal(out.at(-1).realtimeError,'incompleteSnapshot');
+ player.id=43;
+ sync.sample();
+ assert.equal(out.at(-1).role,'43');
+ assert.equal(out.at(-1).snapshot,null);
+ player.masterySkills={smithing:2};
+ sync.sample();
+ assert.equal(out.at(-1).source,'client');
+ assert.equal(out.at(-1).status,'live');
+ sync.dispose();
+});

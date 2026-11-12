@@ -39,13 +39,19 @@ function perSkill(select){
  }));
 }
 
-export function resolveSkillMasteries(player){
+export function validateMasteryPages(player){
  const {masteries,masteryPage,masterySkills,masteryAway}=player;
  if(!validRanks(masteries))throw Error('incompleteSnapshot');
- if(!pageFields.some(key=>Object.hasOwn(player,key)))return null;
+ if(!pageFields.some(key=>Object.hasOwn(player,key)))return;
  if(!pageFields.every(key=>Object.hasOwn(player,key))||!validPage(masteryPage)||!record(masterySkills)||!record(masteryAway)
   ||workSkills.some(skill=>Object.hasOwn(masterySkills,skill)&&!validPage(masterySkills[skill]))
   ||Object.keys(masteryAway).some(key=>!validPageKey(key)||!validRanks(masteryAway[key])))throw Error('incompleteSnapshot');
+}
+
+export function resolveSkillMasteries(player){
+ validateMasteryPages(player);
+ if(!Object.hasOwn(player,'masteryPage'))return null;
+ const {masteries,masteryPage,masterySkills,masteryAway}=player;
  return perSkill(skill=>{
   const binding=masterySkills[skill];
   return Object.hasOwn(masterySkills,skill)&&binding!==masteryPage&&Object.hasOwn(masteryAway,binding)?masteryAway[binding]:masteries;
