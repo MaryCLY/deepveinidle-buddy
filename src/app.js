@@ -9,7 +9,7 @@ import {feeInputMax,feeToInput,feeFromInput} from './fee-units.js';
 import {sortItemRows,sortNumericRows,itemLevel} from './table-sorting.js';
 import {sortCollectionRows} from './collection-sorting.js';
 import {hasAvailableAsks,hasInventoryMaterials} from './recipe-availability.js';
-import {estimateCraftRecipe} from './crafting-estimates.js';
+import {createIntermediatePricing,estimateCraftRecipe} from './crafting-estimates.js';
 import {installPanelGeometry} from './panel-geometry.js';
 import * as game from './engine/upstream.js';
 import {craftingJobs,craftingTiers,craftingSkills,craftingMaterials} from './engine/crafting-model.js';
@@ -53,16 +53,19 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
  Object.assign(errors,Object.fromEntries([
  ['realtimeUnavailable','实时读取不可用，无法预填','Live reading unavailable; cannot prefill'],['invalidPrefill','缺口、价格或次数无效，无法预填','Invalid quantity, price or attempts'],['gameRoleChanged','游戏角色已变化，预填已停止','Game character changed; prefill stopped'],['planChanged','订单、库存或行情已变化，请重试','Plan, stock or prices changed; retry'],['gameControlMissing','未找到对应游戏控件，预填已停止','Game control not found; prefill stopped'],['gameRarityUnavailable','游戏暂未提供此品质选项，请先备齐至少一次制作所需材料','This rarity is not available in the game; prepare enough materials for at least one craft'],['gameControlAmbiguous','游戏控件不唯一，预填已停止','Ambiguous game controls; prefill stopped'],['gameControlUnavailable','游戏当前不支持此配方或选项','Recipe or option is unavailable'],['gameItemMismatch','游戏物品不匹配，预填已停止','Game item mismatch; prefill stopped'],['gamePrefillMismatch','游戏调整或拒绝了输入，请核对草稿','Game changed or rejected the values; check the draft'],['prefillBusy','正在预填，请稍候','Prefill in progress'],['invalidExecutionState','游戏任务状态无效，已清除任务高亮','Invalid game task state; task highlights cleared'],['invalidDebugPreference','调试设置无效，原值已保留，请修正后重新载入','Invalid debug preference; original preserved. Correct it and reload']
  ].map(([code,cn,en])=>[code,[cn,en]])));
+ errors.missingIntermediatePrice=['半成品直购与可行自制路线缺少报价','No price available for buying or crafting this intermediate'];
  const message=code=>errors[code]?.[zh()?0:1]??code;
  const gathering=()=>workspace.selectedMode==='collectionGather';
  const collecting=()=>workspace.selectedMode==='collection';
  const manufacturing=()=>workspace.selectedMode==='craft';
  const current=()=>collecting()?workspace.collectionOrder:manufacturing()?workspace.orders.find(o=>o.id===workspace.currentOrderId):null;
- const modePlan=context=>estimateOrders({...context.workspace,orders:ordersForMode(context.workspace,context.workspace.selectedMode)},context.prices,context.players);
+ const modePlan=context=>estimateOrders({...context.workspace,orders:ordersForMode(context.workspace,context.workspace.selectedMode)},context.prices,context.players,context.intermediatePricing);
  const planActions=plan=>collecting()?collectionActions(plan):plan.actions;
  const priceState=()=>marketPrices??workspace.prices;
  function calculationContext(){
-  return {workspace,prices:createPriceSnapshot(priceState()),players:collectionPlayers(workspace.character)};
+  const prices=createPriceSnapshot(priceState()),players=collectionPlayers(workspace.character);
+  const intermediatePricing=collecting()&&workspace.expandMetalBars?createIntermediatePricing(workspace.character,prices,players):null;
+  return {workspace,prices,players,intermediatePricing};
  }
  const option=(values,value)=>values.map(([v,label])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(label)}</option>`).join('');
  const outputId=(job,tier)=>job.upgrade?game.upgradeResult(job.upgrade,game.withRarity(job.upgrade.from[0],tier)):game.recipeOutput(job,tier);
@@ -74,7 +77,7 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
  const button=(action,label,extra='')=>`<button type="button" data-action="${action}" ${extra}>${label}</button>`;
  function pricingControls(){
   const modes=[['ask',text('卖单','Asks')],['bid',text('买单','Bids')]];
-  return `<div class="pricing-controls">${collecting()?`<label><input id="expand-metal-bars" type="checkbox" ${workspace.expandMetalBars?'checked':''}>${text('展开半成品','Expand intermediates')}</label>`:''}${[['material',text('材料','Material'),workspace.inventoryOnly?'inventory':workspace.excludeInsufficientAsks&&workspace.character.buyMode==='ask'?'ask-stock':workspace.character.buyMode],['product',text('产物','Product'),workspace.productPriceMode]].map(([kind,label,value])=>`<label>${label}<select id="global-${kind}-price-mode" data-pricing="${kind}">${option(kind==='material'?[modes[0],['ask-stock',text('卖单（排除在售数量不足）','Asks (exclude insufficient stock)')],modes[1],['inventory',text('库存（仅仓库材料）','Inventory (stored materials only)')]]:modes,value)}</select></label>`).join('')}</div>`;
+  return `<div class="pricing-controls">${collecting()?`<label><input id="expand-metal-bars" type="checkbox" ${workspace.expandMetalBars?'checked':''}>${text('考虑自制半成品','Consider crafting intermediates')}</label>`:''}${[['material',text('材料','Material'),workspace.inventoryOnly?'inventory':workspace.excludeInsufficientAsks&&workspace.character.buyMode==='ask'?'ask-stock':workspace.character.buyMode],['product',text('产物','Product'),workspace.productPriceMode]].map(([kind,label,value])=>`<label>${label}<select id="global-${kind}-price-mode" data-pricing="${kind}">${option(kind==='material'?[modes[0],['ask-stock',text('卖单（排除在售数量不足）','Asks (exclude insufficient stock)')],modes[1],['inventory',text('库存（仅仓库材料）','Inventory (stored materials only)')]]:modes,value)}</select></label>`).join('')}</div>`;
  }
 
 
@@ -106,7 +109,16 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
   values=values.filter(r=>(skill==='all'||r.job.skill===skill)&&(gathering()||tier==='all'||r.tier===Number(tier))&&(manufacturing()||(gatheringSkills.includes(r.job.skill)?gathering():collecting()))&&`${r.job.name} ${name(r.job.name)}`.toLowerCase().includes(query.toLowerCase()));
   if(state.inventoryOnly)values=values.filter(r=>hasInventoryMaterials(gathering()?r.materials:craftingMaterials(r.job,r.tier,manufacturing()?1:Math.ceil(r.attempts)),s));
   if(state.excludeInsufficientAsks&&s.buyMode==='ask')values=values.filter(r=>hasAvailableAsks(manufacturing()?craftingMaterials(r.job,r.tier,1):r.materials,ps));
-  if(!manufacturing())values=values.map(r=>{const q=Object.entries(r.materials).map(([id,qty])=>[qty,collectionPrice(Number(id),ps,s.buyMode).price]);const cost=q.some(([qty,p])=>qty>0&&p===null)?null:q.reduce((v,[qty,p])=>v+qty*(p??0),0);return {...r,cost,costPerPoint:cost===null?null:cost/r.points};}).filter(r=>(minPoints===''||r.points>=Number(minPoints))&&(maxSecondsPerPoint===''||r.secondsPerPoint<=Number(maxSecondsPerPoint))&&(maxCost===''||r.costPerPoint!==null&&r.costPerPoint<=Number(maxCost)));
+  if(!manufacturing())values=values.map(row=>{
+   let cost=0;
+   for(const [key,amount] of Object.entries(row.materials)){
+    if(amount===0)continue;
+    const id=Number(key),quote=context.intermediatePricing?.get(id)??collectionPrice(id,ps,s.buyMode);
+    if(quote.price===null){cost=null;break;}
+    cost=add(cost,amount*quote.price);
+   }
+   return {...row,cost,costPerPoint:cost===null?null:cost/row.points};
+  }).filter(r=>(minPoints===''||r.points>=Number(minPoints))&&(maxSecondsPerPoint===''||r.secondsPerPoint<=Number(maxSecondsPerPoint))&&(maxCost===''||r.costPerPoint!==null&&r.costPerPoint<=Number(maxCost)));
   if(!manufacturing())values=sortCollectionRows(values,sort,sortDirection);else values=sortedItems(values,'recipes',r=>outputId(r.job,r.tier));
   const total=values.length,pages=Math.max(1,Math.ceil(total/10));page=Math.min(Math.max(1,page),pages);const visible=all?values:values.slice((page-1)*10,page*10);if(manufacturing()){return {values:visible.map(r=>({...r,estimate:estimateCraftRecipe(s,r.job,r.tier,ps,players,state.productPriceMode)})),total,pages};}return {values:visible,total,pages};
  }
@@ -158,7 +170,16 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
  }
  function prefillEnabled(){return !!gameIntegration&&latestEnvelope?.source==='client'&&live&&!prefillBusy;}
  function refreshForPrefill(){if(!readCharacter)return;const sample=readCharacter();if(!sample||sample.role!==latestEnvelope?.role)throw Error('gameRoleChanged');if(!applySnapshot({...latestEnvelope,snapshot:sample.snapshot}))throw Error('incompatibleCharacter');}
- function purchaseRequest(id,context){const row=modePlan(context).rows.find(r=>r.id===id);if(!row||row.owned===null||!Number.isSafeInteger(row.purchase)||row.purchase<1||!Number.isSafeInteger(row.price)||row.price<1)throw Error('invalidPrefill');return {role:latestEnvelope?.role,itemId:id,baseId:game.baseItemId(id),tier:game.itemTier(id),quantity:row.purchase,price:row.price,search:item(id)};}
+ function purchaseQuantity(row){return row.selfCrafted?row.directPurchase:row.purchase;}
+ function canDraftPurchase(row){
+  const quantity=purchaseQuantity(row);
+  return row.owned!==null&&Number.isSafeInteger(quantity)&&quantity>0&&Number.isSafeInteger(row.price)&&row.price>0;
+ }
+ function purchaseRequest(id,context){
+  const row=modePlan(context).rows.find(row=>row.id===id);
+  if(!row||!canDraftPurchase(row))throw Error('invalidPrefill');
+  return {role:latestEnvelope?.role,itemId:id,baseId:game.baseItemId(id),tier:game.itemTier(id),quantity:purchaseQuantity(row),price:row.price,search:item(id),...(row.selfCrafted?{selfCrafted:true}:{})};
+ }
  function actionRequest(key,context){const row=planActions(modePlan(context)).find(r=>r.key===key),job=craftingJobs.find(j=>j.id===row?.jobId)??game.recipes.find(j=>j.id===row?.jobId);if(!row||!job||job.upgrade||row.issues.length||!Number.isFinite(row.count)||row.count<=0||!Number.isSafeInteger(row.count))throw Error('invalidPrefill');return {role:latestEnvelope?.role,jobId:job.id,skill:job.skill,tier:row.tier,quantity:row.count,manufacturing:job.inputs.length>0};}
  function actionLabels(row,job){
  const progress=executionStatus(executionState,job,row.tier),labels=[];
@@ -174,9 +195,18 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
  return `<tr data-item-id="${output}" data-execution-action="${esc(row.key)}" ${collecting()&&!row.prerequisite?`data-line-key="${esc(row.key)}"`:""} class="${[row.materialStatus==='ready'?'ready':row.materialStatus==='shared'?'materials-shared':'',progress.running?'running':'',progress.queued?'queued':''].filter(Boolean).join(' ')}"${labels.length?` title="${esc(labels.join(' · '))}"`:''}><td class="text-cell">${tableItemName(game.baseItemId(output))}${routeLabel(job)}${row.prerequisite?`<small class="route-label">${text('配套制造','Prerequisite crafting')}</small>`:''}${row.issues.length?`<small class="alert">${esc(row.issues.map(message).join(' · '))}</small>`:''}${row.status==='complete'?`<small>${text('已完成','Completed')}</small>`:''}</td><td>${tiers()[row.tier]}</td><td>${esc(skillName(job.skill))}</td><td>${number(row.count)}</td><td>${duration(row.seconds)}</td><td class="actions">${button('prefill-action',text('执行','Execute'),`class="compact" data-key="${esc(row.key)}" ${!prefillEnabled()||job.upgrade||row.issues.length||row.count===null||row.count<=0?'disabled':''} title="${esc(job.upgrade?text('升级配方暂不支持预填','Upgrade prefill is not supported'):text('仅预填，不启动；收藏次数为期望向上取整','Prefill only; does not start. Collection attempts are rounded up.'))}"`)}${collecting()&&!row.prerequisite?targetControls(row,workspace.collectionOrder.id):''}</td></tr>`;}).join('')||`<tr><td colspan="6" class="muted">${text('暂无执行动作','No planned actions')}</td></tr>`}</tbody></table></div>`;
  }
 
+
+ function purchaseRow(row){
+  const name=tableItemName(row.id);
+  const itemLabel=row.selfCrafted?`<span class="self-crafted-name">${name}<small class="route-label">${text('自制','Craft')}</small></span>`:name;
+  const attributes=`class="compact${row.selfCrafted?' self-buy':''}" data-item="${row.id}" ${!prefillEnabled()||!canDraftPurchase(row)?'disabled':''}`;
+  const title=text('仅打开求购草稿并预填，不购买','Open and fill a buy-order draft only; does not buy');
+  return `<tr data-item-id="${row.id}" data-material="${row.id}"><td class="text-cell">${itemLabel}</td><td>${tiers()[game.itemTier(row.id)]}</td><td>${number(row.purchase,0)}</td><td>${number(row.required,0)} / ${number(row.owned,0)} / ${number(row.produced)}</td><td>${number(row.cost)}</td><td>${button('prefill-purchase',text('购买','Buy'),attributes+' title="'+title+'"')}</td></tr>`;
+ }
+
  function execution(context){
   let plan,seconds;try{plan=modePlan(context);seconds=plan.craftSeconds===null||plan.collectionSeconds===null?null:add(plan.craftSeconds,plan.collectionSeconds);}catch(e){return `<section class="section" id="execution-plan"><h2>${text('执行计划','Execution plan')}</h2><p class="alert">${esc(message(e.message))}</p></section>`;}
-  return `<section class="section" id="procurement"><div class="heading procurement-heading"><h2>${text('采购材料','Purchase materials')}</h2><div class="procurement-costs"><span data-plan-cost="material" title="${text('完整需求材料成本，不扣库存或预计产物，不含加工费','Full material cost before stock and expected outputs; excludes fees')}">${text('材料成本','Material cost')} ${number(plan.materialCost)}</span><span data-plan-cost="purchase">${text('采购成本','Purchase cost')} ${number(plan.total)}</span></div><small>${text('产物按期望估算','Outputs are expected amounts')}</small></div>${plan.blocked||plan.unknownInventory?`<p class="alert">${text('未完整计算','Incomplete calculation')} · ${plan.blocked?text('等待／冲突／不可计算项 ','Pending/conflicting/unavailable lines ')+plan.blocked:''} ${plan.unknownInventory?text('库存未知','Stock unknown'):''}</p>`:''}${plan.missingPrices?`<p class="note">${text('缺价','Missing prices')} ${plan.missingPrices} · ${text('已知价格小计','Known subtotal')} ${number(plan.subtotal)}</p>`:''}<div class="scroll"><table id="purchase-materials" class="frozen-table"><thead><tr>${sortHeader('procurement','item',text('物品','Item'))}${sortHeader('procurement','rarity',text('稀有度','Rarity'))}${[['purchase',text('数量','Quantity')],['required',text('需求 / 库存 / 产物','Required / Stock / Outputs')],['cost',text('金额','Amount')]].map(([column,label])=>sortHeader('procurement',column,label)).join('')}<th>${text('操作','Actions')}</th></tr></thead><tbody>${sortedItems(plan.rows,'procurement',r=>r.id).map(r=>`<tr data-item-id="${r.id}" data-material="${r.id}"><td class="text-cell">${tableItemName(r.id)}</td><td>${tiers()[game.itemTier(r.id)]}</td><td>${number(r.purchase,0)}</td><td>${number(r.required,0)} / ${number(r.owned,0)} / ${number(r.produced)}</td><td>${number(r.cost)}</td><td>${button('prefill-purchase',text('购买','Buy'),`class="compact" data-item="${r.id}" ${!prefillEnabled()||r.owned===null||!Number.isSafeInteger(r.purchase)||r.purchase<=0||!Number.isSafeInteger(r.price)||r.price<1?'disabled':''} title="${text('仅打开求购草稿并预填，不购买','Open and fill a buy-order draft only; does not buy')}"`)}</td></tr>`).join('')||`<tr><td colspan="6" class="muted">${text('暂无材料需求','No material requirements')}</td></tr>`}</tbody></table></div><p class="alert">${esc(marketError)}</p></section><section class="section" id="execution-plan"><div class="heading execution-heading"><h2>${text('执行计划','Execution plan')}</h2>${collecting()?`<label><input id="auto-remove" type="checkbox" ${workspace.autoRemove?'checked':''}>${text('自动移除已完成','Auto-remove completed')}</label>${button('clear-collection-plan',text('删除所有计划','Delete all plans'),`class="compact" ${workspace.collectionOrder.lines.length?'':'disabled'}`)}`:''}</div><div class="summary"><span>${text('时间','Time')} ${duration(seconds)}</span><span>${text('精通点','Mastery points')} ${number(plan.points,0)}</span></div>${actionTable(planActions(plan))}</section>`;
+  return `<section class="section" id="procurement"><div class="heading procurement-heading"><h2>${text('采购材料','Purchase materials')}</h2><div class="procurement-costs"><span data-plan-cost="material" title="${text('完整需求材料成本，不扣库存或预计产物，不含加工费','Full material cost before stock and expected outputs; excludes fees')}">${text('材料成本','Material cost')} ${number(plan.materialCost)}</span><span data-plan-cost="purchase">${text('采购成本','Purchase cost')} ${number(plan.total)}</span></div><small>${text('产物按期望估算','Outputs are expected amounts')}</small></div>${plan.blocked||plan.unknownInventory?`<p class="alert">${text('未完整计算','Incomplete calculation')} · ${plan.blocked?text('等待／冲突／不可计算项 ','Pending/conflicting/unavailable lines ')+plan.blocked:''} ${plan.unknownInventory?text('库存未知','Stock unknown'):''}</p>`:''}${plan.missingPrices?`<p class="note">${text('缺价','Missing prices')} ${plan.missingPrices} · ${text('已知价格小计','Known subtotal')} ${number(plan.subtotal)}</p>`:''}<div class="scroll"><table id="purchase-materials" class="frozen-table"><thead><tr>${sortHeader('procurement','item',text('物品','Item'))}${sortHeader('procurement','rarity',text('稀有度','Rarity'))}${[['purchase',text('数量','Quantity')],['required',text('需求 / 库存 / 产物','Required / Stock / Outputs')],['cost',text('金额','Amount')]].map(([column,label])=>sortHeader('procurement',column,label)).join('')}<th>${text('操作','Actions')}</th></tr></thead><tbody>${sortedItems(plan.rows,'procurement',r=>r.id).map(purchaseRow).join('')||`<tr><td colspan="6" class="muted">${text('暂无材料需求','No material requirements')}</td></tr>`}</tbody></table></div><p class="alert">${esc(marketError)}</p></section><section class="section" id="execution-plan"><div class="heading execution-heading"><h2>${text('执行计划','Execution plan')}</h2>${collecting()?`<label><input id="auto-remove" type="checkbox" ${workspace.autoRemove?'checked':''}>${text('自动移除已完成','Auto-remove completed')}</label>${button('clear-collection-plan',text('删除所有计划','Delete all plans'),`class="compact" ${workspace.collectionOrder.lines.length?'':'disabled'}`)}`:''}</div><div class="summary"><span>${text('时间','Time')} ${duration(seconds)}</span><span>${text('精通点','Mastery points')} ${number(plan.points,0)}</span></div>${actionTable(planActions(plan))}</section>`;
  }
  function render(){
   if(disposed)return;root.host.toggleAttribute('data-closed',closed);if(!mounting)onVisibilityChange(!closed);if(closed){debug?.close();return;}
@@ -201,9 +231,11 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
    if(isPrefill){
     if((action==='prefill-gather')!==gathering())throw Error('invalidPrefill');
     if(!prefillEnabled())throw Error('realtimeUnavailable');
+    const buyingSelfCrafted=action==='prefill-purchase'&&el.classList.contains('self-buy');
     refreshForPrefill();
     const context=calculationContext();
     const request=action==='prefill-purchase'?purchaseRequest(Number(el.dataset.item),context):action==='prefill-gather'?gatherRequest(el.dataset.key,context):actionRequest(el.dataset.key,context);
+    if(action==='prefill-purchase'&&Boolean(request.selfCrafted)!==buyingSelfCrafted)throw Error('planChanged');
     const purchasing=action==='prefill-purchase',signature=purchasing?JSON.stringify(request):prefillSignature(request),operationMode=modeGeneration;
     const guard=()=>{try{
      refreshForPrefill();

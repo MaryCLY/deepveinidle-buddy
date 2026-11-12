@@ -11,7 +11,7 @@
 | 模块 | 职责 |
 | --- | --- |
 | engine | 工作配置、收藏、库存、报价、原始概率与角色构造 |
-| workspace、crafting-estimates、metal-bars、planned-products | 订单校验、解析计算、收藏制造的半成品库存分配与缺口展开（金属锭、切割宝石）、采购抵扣与费用 |
+| workspace、crafting-estimates、metal-bars、planned-products | 订单校验、解析计算、收藏制造的半成品比价、库存分配与采购草稿数量计算（金属锭、切割宝石）、采购抵扣与费用 |
 | game-sync、capture、execution-status | 只读客户端采样、已有连接旁听、实时任务高亮 |
 | main、navigation、mobile-layout | 按角色挂载、入口和双端可视区域 |
 | app、theme、stable-view、frozen-columns | 面板交互、稳定节点及冻结表格 |
@@ -26,7 +26,7 @@ app 每次渲染创建工作区、只读行情快照和角色计算参数的共�
 
 `capture` 从客户端和服务器角色快照中投影受支持技能的绑定、当前页与其他已拥有页。`engine/skill-masteries` 校验分页输入并生成逐技能的有效等级，`collectionPlayers` 为各工作技能提供对应的计算角色。收藏候选缓存和执行草稿签名使用同一有效配置，换页但有效等级相同时保留待填请求。旧快照仍可只含当前等级表。
 
-半成品展开沿用现有 `metal-bars` 模块、`expandMetalBars` 存档字段和动作标识；显式配方清单仅含5种金属锭与宝石切割，不增加递归制造链。
+收藏（制造）的候选与固定单共用本次角色及行情快照的半成品比价缓存。`metal-bars` 处理五种金属锭和切割宝石的同品质库存及一层原料需求。`workspace` 分开累计独立预计产物和配套产物，供采购汇总与自制行替代购买预填使用。开关沿用 `expandMetalBars` 存档字段。
 
 工作区以 `version=2` 持久化用户数据，运行时按模式选择订单范围并组合角色与行情供引擎计算。角色同步仅在自动移除完成收藏实际改变订单时触发保存；字段与恢复规则见[存储与恢复](panel.md#存储与恢复)。
 

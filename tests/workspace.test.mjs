@@ -11,6 +11,9 @@ function setup(){const w=defaults();w.character.initialized=true;w.character.wor
 const quote=(state,id,value)=>({...state,quotes:{...state.quotes,[id]:{ask:{value,capturedAt:Date.now()}}}});
 const evaluate=w=>estimateOrders(w,createPriceSnapshot(w.prices));
 const evaluateCollection=w=>evaluate({...w,orders:[w.collectionOrder]});
+function setAsks(workspace,values){
+ for(const [id,price] of Object.entries(values))workspace.prices=quote(workspace.prices,id,price);
+}
 test('mixed intent survives strict workspace roundtrip; invalid entries reject atomically',()=>{const w=setup();putLine(w.orders[0],craft(10));putLine(w.orders[0],collection());assert.deepEqual(validateWorkspace(w),w);assert.throws(()=>validateWorkspace({...w,orders:[{...w.orders[0],lines:[{...craft(),count:1.2}]}]}),/invalidLine/);});
 test('craft counts replace, zero removes; collection keeps highest target',()=>{const o=createOrder();putLine(o,craft(5));putLine(o,craft(7));assert.equal(o.lines[0].count,7);putLine(o,collection(10));putLine(o,collection(100));putLine(o,collection(10));assert.equal(o.lines.length,2);assert.equal(o.lines[1].target,100);putLine(o,craft(0));assert.equal(o.lines.length,1);});
 test('duplicate keys and order IDs are rejected',()=>{const o=createOrder();o.lines=[craft(),craft()];assert.throws(()=>validateOrders([o]),/duplicateLine/);o.lines=[];assert.throws(()=>validateOrders([o,o]),/invalidOrders/);});
@@ -286,6 +289,39 @@ test('collection bar expansion values raw materials without changing the preview
  assert.throws(()=>validateWorkspace({...w,expandMetalBars:'true'}),/invalidWorkspace/);
 });
 
+test('a price reversal or tie removes smelting, alternative purchases and ore demand',()=>{
+ const w=setup();w.expandMetalBars=true;w.character.counts[80]=90;w.character.bank={40:8};
+ putLine(w.collectionOrder,{kind:'collection',jobId:51,itemId:80,target:100});
+ setAsks(w,{1:20,2:25,40:60});
+ const crafted=evaluateCollection(w);
+ const bar=crafted.rows.find(row=>row.id===40);
+ assert.equal(crafted.materialCost,1020);assert.equal(bar.directPurchase,12);assert.equal(bar.selfCrafted,true);
+ for(const price of [45,25,0]){
+  setAsks(w,{40:price});
+  const bought=evaluateCollection(w);
+  assert.deepEqual(bought.rows,[{id:40,required:20,owned:8,produced:0,purchase:12,price,cost:12*price}]);
+  assert.equal(bought.materialCost,20*price);assert.equal(bought.collectionSeconds,bought.entries[0].seconds);
+  assert.equal(bought.actions.some(row=>row.prerequisite),false);
+ }
+});
+
+test('a partially quoted recipe falls back to purchase; losing the buy quote leaves demand pending',()=>{
+ const w=setup();w.expandMetalBars=true;w.character.counts[80]=99;
+ putLine(w.collectionOrder,{kind:'collection',jobId:51,itemId:80,target:100});
+ setAsks(w,{1:2,40:10});
+ assert.equal(evaluateCollection(w).rows[0].purchase,2);
+ delete w.prices.quotes[40];
+ const pending=evaluateCollection(w);
+ assert.equal(pending.rows.find(row=>row.id===40).required,2);
+ assert.equal(pending.materialCost,null);assert.equal(pending.collectionSeconds,null);
+ assert.equal(pending.actions.some(row=>row.prerequisite),false);
+ setAsks(w,{2:3});
+ const recovered=evaluateCollection(w);
+ assert.equal(recovered.materialCost,10);
+ assert.equal(recovered.entries[0].barSteps[0].count,2);
+ assert.equal(recovered.rows.find(row=>row.id===40).selfCrafted,undefined);
+});
+
 test('collection bar stock covers demand before only the shortage is smelted and valued',()=>{
  const w=setup();w.expandMetalBars=true;w.character.counts[80]=95;
  putLine(w.collectionOrder,{kind:'collection',jobId:51,itemId:80,target:100});
@@ -309,6 +345,7 @@ test('collection bar stock covers demand before only the shortage is smelted and
 
 test('collection bar stock is shared once across saved entries without changing inventory or intent',()=>{
  const w=setup();w.expandMetalBars=true;w.character.bank={40:5};w.character.counts={80:98,360:94};
+ setAsks(w,{1:2,2:3,40:10});
  for(const [jobId,itemId]of [[51,80],[308,360]])putLine(w.collectionOrder,{kind:'collection',jobId,itemId,target:100});
  const before=workspaceForStorage(w),plan=evaluateCollection(w);
  assert.equal(plan.entries[0].barSteps,undefined);assert.equal(plan.entries[1].barSteps[0].count,5);
@@ -319,8 +356,9 @@ test('collection bar stock is shared once across saved entries without changing 
  assert.equal(evaluateCollection(w).entries[1].barSteps[0].count,1);
 });
 
-test('collection bar expansion respects quality and blocks locked or unknown bar supply explicitly',()=>{
+test('collection bar sourcing respects quality, purchases locked output and propagates unknown inventory',()=>{
  const w=setup();w.expandMetalBars=true;w.character.counts[1080]=98;
+ setAsks(w,{1001:2,1002:3,1040:10});
  putLine(w.collectionOrder,{kind:'collection',jobId:51,itemId:1080,target:100});
  w.character.bank={40:100,1040:1};
  const matched=evaluateCollection(w);
@@ -329,30 +367,33 @@ test('collection bar expansion respects quality and blocks locked or unknown bar
  w.character.bankLocked=[1040];
  const locked=evaluateCollection(w);
  assert.equal(locked.rows.find(row=>row.id===1040).owned,0);
- assert.equal(locked.entries[0].barSteps[0].count,4);
- assert.equal(locked.entries[0].barSteps[0].status,'materialLocked');
- assert.equal(locked.total,null);assert.equal(locked.collectionSeconds,null);
+ assert.equal(locked.entries[0].barSteps,undefined);
+ assert.equal(locked.total,40);assert.equal(locked.collectionSeconds,locked.entries[0].seconds);
  w.character.bankLocked=[];w.character.bank=null;
- const unknown=evaluateCollection(w),bar=unknown.rows.find(row=>row.id===1040),step=unknown.entries[0].barSteps[0];
+ const unknown=evaluateCollection(w),bar=unknown.rows.find(row=>row.id===1040);
  assert.deepEqual([bar.required,bar.owned,bar.produced,bar.purchase],[4,null,null,null]);
- assert.equal(step.count,null);assert.equal(step.status,'unknownInventory');
- assert.equal(unknown.actions.find(row=>row.prerequisite).count,null);
+ assert.equal(bar.selfCrafted,undefined);
  assert.equal(unknown.materialCost,null);assert.equal(unknown.collectionSeconds,null);
  assert.equal(unknown.orders[0].seconds,null);assert.equal(unknown.unknownInventory,true);
 });
 
 test('explicit bar collection retains its output alongside prerequisite smelting',()=>{
  const w=setup();w.expandMetalBars=true;w.character.bank={40:4};w.character.counts={40:97,80:95};
+ setAsks(w,{1:2,2:3,40:10});
  putLine(w.collectionOrder,{kind:'collection',jobId:41,itemId:40,target:100});
  putLine(w.collectionOrder,{kind:'collection',jobId:51,itemId:80,target:100});
  const plan=evaluateCollection(w),bar=plan.rows.find(row=>row.id===40);
  assert.deepEqual([bar.required,bar.owned,bar.produced,bar.purchase],[10,4,9,0]);
+ assert.equal(bar.selfCrafted,true);assert.equal(bar.directPurchase,3);
  assert.equal(plan.entries[0].attempts,3);assert.equal(plan.entries[1].barSteps[0].count,6);
  assert.equal(plan.rows.find(row=>row.id===1).required,9);assert.equal(plan.rows.find(row=>row.id===2).required,9);
+ w.character.counts[40]=94;
+ assert.equal(evaluateCollection(w).rows.find(row=>row.id===40).directPurchase,0);
 });
 
 test('collection exposes merged prerequisites by metal and quality while retaining editable targets',()=>{
  const w=setup();w.expandMetalBars=true;w.character.bank={1:5,2:5};
+ setAsks(w,{1:2,2:3,40:10,1001:2,1002:3,1040:10});
  w.character.counts={80:98,360:97,1080:99};
  for(const [jobId,itemId]of [[51,80],[308,360],[51,1080]])putLine(w.collectionOrder,{kind:'collection',jobId,itemId,target:100});
  const plan=evaluateCollection(w),rows=collectionActions(plan),steps=rows.filter(row=>row.prerequisite);
@@ -387,31 +428,27 @@ test('gem shortages share stock once, merge cutting steps and preserve costs, ti
  assert.equal(off.rows.find(row=>row.id===180).purchase,6);assert.equal(off.points,plan.points);
 });
 
-test('gem expansion matches quality and explicitly blocks locked or unknown stock',()=>{
+test('gem sourcing matches quality, purchases locked output and propagates unknown stock',()=>{
  const w=setup();w.expandMetalBars=true;w.character.counts[1181]=95;
+ setAsks(w,{1180:10,1100:2,1004:1});
  putLine(w.collectionOrder,{kind:'collection',jobId:231,itemId:1181,target:100});
  w.character.bank={180:100,1180:2,1100:3,1004:5};
  const plan=evaluateCollection(w),step=plan.entries[0].barSteps[0];
  assert.equal(step.tier,1);assert.equal(step.count,3);assert.deepEqual(step.materials,{1100:3});
  assert.equal(step.status,'ok');assert.equal(plan.total,0);
- w.character.bank={1180:5};assert.equal(evaluateCollection(w).entries[0].barSteps,undefined);
+ w.character.bank={1180:5,1004:5};assert.equal(evaluateCollection(w).entries[0].barSteps,undefined);
  w.character.bankLocked=[1180];
- const locked=evaluateCollection(w);assert.equal(locked.entries[0].barSteps[0].status,'materialLocked');assert.equal(locked.total,null);
+ const locked=evaluateCollection(w);assert.equal(locked.entries[0].barSteps,undefined);assert.equal(locked.total,50);
  w.character.bankLocked=[];w.character.bank=null;
- const unknown=evaluateCollection(w);assert.equal(unknown.entries[0].barSteps[0].count,null);
- assert.equal(unknown.entries[0].barSteps[0].status,'unknownInventory');assert.equal(unknown.materialCost,null);assert.equal(unknown.collectionSeconds,null);
+ const unknown=evaluateCollection(w);assert.equal(unknown.rows.find(row=>row.id===1180).purchase,null);
+ assert.equal(unknown.unknownInventory,true);assert.equal(unknown.materialCost,null);assert.equal(unknown.collectionSeconds,null);
 });
 
-test('only the six allowlisted material recipes expand, excluding equipment and tools',async()=>{
- const {expandBarMaterials}=await import('../src/metal-bars.js');
+test('only the six allowlisted material recipes are eligible for crafting',async()=>{
+ const {intermediateJob}=await import('../src/metal-bars.js');
  const allowed=new Set([41,42,43,44,45,230]);
  for(const job of craftingJobs.filter(job=>!job.upgrade))for(const tier of craftingTiers(job)){
-  const itemId=game.recipeOutput(job,tier),materials={[itemId]:2};
-  const result=expandBarMaterials(materials,new Map());
-  if(allowed.has(job.id)){
-   assert.equal(result.steps.length,1);assert.equal(result.steps[0].jobId,job.id);assert.equal(result.steps[0].count,2);
-  }else{
-   assert.deepEqual(result.steps,[],job.name);assert.deepEqual(result.requirements,materials);assert.deepEqual(result.costMaterials,materials);
-  }
+  const itemId=game.recipeOutput(job,tier);
+  assert.equal(intermediateJob(itemId)?.id,allowed.has(job.id)?job.id:undefined,job.name);
  }
 });

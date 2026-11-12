@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {defaults,estimateOrders,putLine} from '../src/workspace.js';
+import {createPriceSnapshot} from '../src/engine/price-protocol.js';
+import {createIntermediatePricing} from '../src/crafting-estimates.js';
+
+function fixedPlan(quotes,extraBars=0){
+ const w=defaults();
+ Object.assign(w.character,{initialized:true,worldTick:1000000,bank:{40:4},pack:{},counts:{80:95,40:100-extraBars}});
+ for(const skill in w.character.config.levels)w.character.config.levels[skill]=100;
+ for(const [id,value]of Object.entries(quotes))w.prices.quotes[id]={ask:{value,capturedAt:1}};
+ w.expandMetalBars=true;w.orders=[w.collectionOrder];
+ putLine(w.collectionOrder,{kind:'collection',itemId:80,jobId:51,target:100});
+ if(extraBars)putLine(w.collectionOrder,{kind:'collection',itemId:40,jobId:41,target:100});
+ return estimateOrders(w,createPriceSnapshot(w.prices));
+}
+test('a strictly cheaper recipe enables direct purchase of the remaining independent gap',()=>{
+ for(const [extra,expected] of [[0,6],[3,3],[7,0]]){
+  const plan=fixedPlan({1:2,2:3,40:10},extra),bar=plan.rows.find(row=>row.id===40);
+  assert.equal(bar.selfCrafted,true);assert.equal(bar.directPurchase,expected);assert.equal(bar.purchase,0);
+ }
+});
+test('candidate valuation follows the material quote side and the required crafting level',()=>{
+ const w=defaults(),state=w.character;
+ state.initialized=true;state.worldTick=1000000;state.config.levels.smithing=100;
+ for(const [id,ask,bid] of [[3,12,4],[41,10,30]]){
+  w.prices.quotes[id]={ask:{value:ask,capturedAt:1},bid:{value:bid,capturedAt:1}};
+ }
+ const prices=createPriceSnapshot(w.prices);
+ state.buyMode='bid';
+ const bid=createIntermediatePricing(state,prices).get(41);
+ assert.equal(bid.craft,true);assert.equal(bid.price,4);
+ state.buyMode='ask';
+ const ask=createIntermediatePricing(state,prices).get(41);
+ assert.equal(ask.price,10);
+ state.buyMode='bid';state.config.levels.smithing=1;
+ const unavailable=createIntermediatePricing(state,prices).get(41);
+ assert.equal(unavailable.price,30);assert.equal(unavailable.craft,false);
+});
+test('missing both route prices preserves demand and blocks speculative actions',()=>{
+ const plan=fixedPlan({}),bar=plan.rows.find(row=>row.id===40);
+ assert.equal(plan.materialCost,null);assert.equal(plan.collectionSeconds,null);assert.equal(bar.required,10);
+ assert.equal(plan.entries[0].status,'missingIntermediatePrice');assert.equal(plan.actions.some(row=>row.prerequisite),false);
+});
