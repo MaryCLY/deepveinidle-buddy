@@ -1,7 +1,8 @@
 import {requireKeys} from './record-shape.js';
+import {resolveSkillMasteries,validateSkillMasteries} from './skill-masteries.js';
 import {validateInventoryMap as validateBank,validateInventoryLocks,readInventoryParts} from './character-inventory.js';
 import * as game from './upstream.js';
-import {craftingDefaults,craftingPlayer,normalizeCrafting,importCrafting,craftingJobs,craftingMaterials} from './crafting-model.js';
+import {craftingDefaults,craftingPlayer,normalizeCrafting,importCrafting,craftingJobs,craftingMaterials,craftingSkills} from './crafting-model.js';
 import {gatheringDefaults,gatheringPlayer,normalizeGathering,importGathering,gatheringSkills} from './gathering-model.js';
 import {workQualities} from './work-expectation.js';
 import {readWorldBuffs} from './world-buffs.js';
@@ -33,7 +34,8 @@ function validateCounts(raw,onInvalid){
 }
 export function validateCollection(raw){
  requireKeys(raw,['version','initialized','capturedAt','inventoryCapturedAt','worldTick','importWarnings','counts','bank','pack','bankLocked','buyMode','config'],'invalidConfiguration');
- requireKeys(raw.config,[...configGroups,'worldRarity','blessing'],'invalidConfiguration');
+ const hasSkillMasteries=raw.config!=null&&Object.hasOwn(raw.config,'skillMasteries');
+ requireKeys(raw.config,[...configGroups,'worldRarity','blessing',...(hasSkillMasteries?['skillMasteries']:[])],'invalidConfiguration');
  if(!record(raw)||raw.version!==1||typeof raw.initialized!=='boolean'||(raw.worldTick!==null&&(!Number.isSafeInteger(raw.worldTick)||raw.worldTick<0)||raw.initialized&&raw.worldTick===null))throw Error('invalidConfiguration');
  if(raw.capturedAt!==null&&(!Number.isSafeInteger(raw.capturedAt)||raw.capturedAt<=0||raw.capturedAt>Date.now()+60000))throw Error('invalidConfiguration');
  const inventoryCapturedAt=raw.inventoryCapturedAt;
@@ -47,6 +49,7 @@ export function validateCollection(raw){
  if(raw.bank===undefined||raw.pack===undefined)throw Error('invalidConfiguration');
  const gather=normalizeGathering(raw.config),craft=normalizeCrafting(raw.config);
  state.config=mergeConfig(gather,craft);
+ if(hasSkillMasteries)state.config.skillMasteries=validateSkillMasteries(raw.config.skillMasteries);
  for(const group of configGroups){requireKeys(raw.config[group],Object.keys(state.config[group]),'invalidConfiguration');}
  for(const gear of Object.values(raw.config.gear))requireKeys(gear,['id','tier','plus'],'invalidConfiguration');
  for(const group of configGroups)for(const [key,value]of Object.entries(state.config[group])){
@@ -68,7 +71,9 @@ export function importCollection(current,snapshot){
  const warnings=[...craft.warnings,...gather.warnings].filter(k=>/^(skills|equipment|house|masteries|perks|brews|brewBuckets|brewTier|blessing)/.test(k));
  if(warnings.length)throw Error('incompleteSnapshot');
  gather.state.worldRarity=world.worldRarity;
- return validateCollection({...current,initialized:true,capturedAt:snapshot.capturedAt,worldTick:world.worldTick,importWarnings:[...(invalidCounts?[`collections.invalid:${invalidCounts}`]:[])],counts,bank,pack,bankLocked,inventoryCapturedAt,config:mergeConfig(gather.state,craft.state)});
+ const config=mergeConfig(gather.state,craft.state),skillMasteries=resolveSkillMasteries(snapshot.player);
+ if(skillMasteries!==null)config.skillMasteries=skillMasteries;
+ return validateCollection({...current,initialized:true,capturedAt:snapshot.capturedAt,worldTick:world.worldTick,importWarnings:[...(invalidCounts?[`collections.invalid:${invalidCounts}`]:[])],counts,bank,pack,bankLocked,inventoryCapturedAt,config});
 }
 export function collectionTarget(state,id,target){
  const current=state.counts[id]??0,base=game.baseItemId(id),thresholds=game.collectionThresholds(base);
@@ -91,15 +96,23 @@ export function collectionPrice(id,prices,buyMode='ask'){
 export function collectionPlayers(state){
  if(state.initialized&&(!Number.isSafeInteger(state.worldTick)||state.worldTick<0))throw Error('invalidWorldBuffs');
  const tick=state.initialized?state.worldTick:0;
- const configs={craft:collectionWorkConfig(state,'craft'),gather:collectionWorkConfig(state,'gather')};
- return {craft:craftingPlayer(configs.craft,tick).player,gather:gatheringPlayer(configs.gather,tick).player,worldRarity:state.config.worldRarity,tick};
+ const craft=craftingPlayer(state.config,tick).player,gather=gatheringPlayer(state.config,tick).player;
+ const bySkill={};
+ for(const [skills,base] of [[craftingSkills,craft],[gatheringSkills,gather]]){
+  for(const skill of skills){
+   bySkill[skill]=state.config.skillMasteries
+    ?{...base,masteries:{...base.masteries,...state.config.skillMasteries[skill]}}
+    :base;
+  }
+ }
+ return {craft,gather,bySkill,worldRarity:state.config.worldRarity,tick};
 }
 export function estimateCollection(state,id,job,players=collectionPlayers(state),goal){
  if(!job)throw Error('invalidRoute');
  const target=collectionTarget(state,id,goal),base={id,jobId:job.id,skill:job.skill,...target,seconds:null,secondsPerPoint:null,materials:{},attempts:null,status:'uninitialized'};
  if(!state.initialized)return {...base,status:'uninitialized'};
  if(target.complete)return {...base,status:'complete'};
- const gathering=gatheringSkills.includes(job.skill),kind=gathering?'gather':'craft',p=players[kind];
+ const gathering=gatheringSkills.includes(job.skill),p=players.bySkill[job.skill];
  if(game.level(p.skills[job.skill])<job.levelReq)return {...base,status:'levelTooLow'};
  if(job.upgrade){
   const attempts=Math.ceil(target.missing/job.output.qty),quantity=attempts*job.output.qty;
@@ -138,7 +151,7 @@ export function gatheringCollectionRows(state,rows=collectionRows(state),players
   let source=jobs.get(row.jobId);
   if(!source){
    const job=game.recipes.find(job=>job.id===row.jobId),base=job.output.itemId;
-   source={base,qualities:game.itemSupportsRarity(base)?workQualities(players.gather,job,players.tick,players.worldRarity):[1]};
+   source={base,qualities:game.itemSupportsRarity(base)?workQualities(players.bySkill[job.skill],job,players.tick,players.worldRarity):[1]};
    jobs.set(row.jobId,source);
   }
   const details=source.qualities.map((quality,tier)=>{

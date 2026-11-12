@@ -10,7 +10,7 @@ export function plannedProducts(job,tier,count,players){
   if(id===null)throw Error('invalidUpgradeResult');
   perAction[id]=1;
  }else{
-  const gathering=gatheringSkills.includes(job.skill),player=players[gathering?'gather':'craft'];
+  const gathering=gatheringSkills.includes(job.skill),player=players.bySkill[job.skill];
   const burn=game.burnChance(job,player),caught=game.caughtChance(job,player);
   if(![burn,caught].every(value=>Number.isFinite(value)&&value>=0&&value<=1))throw Error('invalidResult');
   if(!gathering)expectedCraftProduct(perAction,job,tier,burn);
