@@ -1,18 +1,18 @@
 # 当前状态
 
-版本：**0.5.8**。计算基线：**1.0.1214**（对应 `package.json` 与 `vendor/manifest.json`）。线上发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准，历史变更见[更新说明](../CHANGELOG.md)。
+版本：**0.5.9**。计算基线：**1.0.1214**（对应 `package.json` 与 `vendor/manifest.json`）。线上发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准，历史变更见[更新说明](../CHANGELOG.md)。
 
 功能与计算规则统一见[面板规则](panel.md)，模块和上游来源见[技术方案](technical.md)。工作区存档保持 `version=2`，新增字段的兼容与降级限制见[存储与恢复](panel.md#存储与恢复)。
 
 ## 当前版本变更
 
-### 工作区待发布
+### 已发布基线 0.5.9
 
 收藏（制造）将「展开半成品」改为「考虑自制半成品」。旧存档已开启的角色会自动参与比价，部分原需自制的缺口可能改为直购。严格自制更便宜且安排了配套制造时，采购材料行显示暗金色「自制」，可用细铜边次选购买按钮预填替代购买草稿。[设计规格](superpowers/specs/2026-11-12-consider-crafting-intermediates-design.md)
 
 桌面无头 Chrome 使用同一 70 级合成角色、5,119 行候选、两个收藏目标和固定行情，交替测量开关，预热后各取 35 组中位数。全量候选重建关闭／开启为 38.8／39.3 ms，候选缓存命中时为 10.7／10.3 ms，固定单重算为 0.115／0.160 ms（每组 40 次）。以上只计计算，不含绘制或游戏网络时间。
 
-本次工作区通过 229 项单元测试与本地构建。桌面无头 Chrome 通过助手模式、成本阈值、供应筛选、游戏预填和移动表格五组场景，共 88 项检查，包含 390px 窄屏标记布局。真实账号与移动真机尚未验证此功能。
+桌面 Chrome 真实账号已核对青铜锭的库存抵扣、配套制造数量和采购表排序。最终细铜边按钮和 390px 窄屏布局已在浏览器夹具验证，移动真机仍待验收。
 
 ### 已发布基线 0.5.8
 
