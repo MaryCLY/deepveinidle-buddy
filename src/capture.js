@@ -1,11 +1,13 @@
 import {craftingSkills,craftingSlots,craftingRooms} from './engine/crafting-model.js';
 import {gatheringSkills,gatheringSlots,gatheringRooms} from './engine/gathering-model.js';
 import {readWorldBuffs} from './engine/world-buffs.js';
-export const characterFields=['lastTick','skills','equipment','brews','brewTier','brewBuckets','house','houseFurniture','masteries','perks','bank','bankLocked','pack','collections','route','queue','queueSlots','workJobId','workRarity','held','raidHeld'];
+import {masteryFields,projectMasteries} from './engine/skill-masteries.js';
+const baseCharacterFields=['lastTick','skills','equipment','brews','brewTier','brewBuckets','house','houseFurniture','perks','bank','bankLocked','pack','collections','route','queue','queueSlots','workJobId','workRarity','held','raidHeld'];
+export const characterFields=[...baseCharacterFields,...masteryFields];
 const record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const routeFields=['zoneId','siteId','jobId','questId','onFull','limit','phase','best','errand','until'];
 const queueFields=['kind','siteId','jobId','zoneId','questId','onFull','limit','rarity','best','ticks'];
-const characterGroups={skills:[...craftingSkills,...gatheringSkills],equipment:[...craftingSlots,...gatheringSlots],masteries:['craft','gather','rare'],perks:['quick','hands'],brews:['hunter','blessing'],brewTier:['hunter'],brewBuckets:['hunter'],house:[...craftingRooms,...gatheringRooms].map(r=>r.id)};
+const characterGroups={skills:[...craftingSkills,...gatheringSkills],equipment:[...craftingSlots,...gatheringSlots],perks:['quick','hands'],brews:['hunter','blessing'],brewTier:['hunter'],brewBuckets:['hunter'],house:[...craftingRooms,...gatheringRooms].map(r=>r.id)};
 export function copyCharacter(player){
  // Invalid tasks stay invalid without copying unknown nested game objects.
  const pick=(value,fields)=>{
@@ -19,7 +21,8 @@ export function copyCharacter(player){
   }
   return selected;
  };
- const result=Object.fromEntries(characterFields.filter(key=>Object.hasOwn(player,key)).map(key=>[key,player[key]]));
+ const result=Object.fromEntries(baseCharacterFields.filter(key=>Object.hasOwn(player,key)).map(key=>[key,player[key]]));
+ Object.assign(result,projectMasteries(player));
 
  for(const [key,fields]of Object.entries(characterGroups))if(record(result[key]))result[key]=Object.fromEntries(fields.filter(field=>Object.hasOwn(result[key],field)).map(field=>[field,result[key][field]]));
  if(record(result.houseFurniture))result.houseFurniture=Object.fromEntries(characterGroups.house.filter(id=>Object.hasOwn(result.houseFurniture,id)).map(id=>[id,record(result.houseFurniture[id])?{}:result.houseFurniture[id]]));

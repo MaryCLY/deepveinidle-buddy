@@ -8,8 +8,9 @@ export function estimateCraftAction(state,job,count,players=collectionPlayers(st
  if(!Number.isSafeInteger(count)||count<=0)throw Error('invalidQuantity');
  if(!state.initialized)return {status:'uninitialized',seconds:null};
  if(state.config.levels[job.skill]<job.levelReq)return {status:'levelTooLow',seconds:null};
- if(job.upgrade)return {status:'ok',seconds:checked(count*(game.upgradeTicks(players.craft,job.upgrade)*game.tickMs/1000))};
- const chance=game.workChance(job,players.craft);
+ const player=players.bySkill[job.skill];
+ if(job.upgrade)return {status:'ok',seconds:checked(count*(game.upgradeTicks(player,job.upgrade)*game.tickMs/1000))};
+ const chance=game.workChance(job,player);
  if(!Number.isFinite(chance)||chance<=0)return {status:'unreachable',seconds:null};
  return {status:'ok',seconds:checked(count*(game.tickMs/1000)/chance)};
 }
@@ -43,6 +44,6 @@ export function estimateCraftRecipe(state,job,tier,prices,players=collectionPlay
  if(action.status!=='ok')return {...action,materials,cost,productValue:null};
  const products={};
  if(job.upgrade){const id=game.upgradeResult(job.upgrade,game.withRarity(job.upgrade.from[0],tier));if(id===null)throw Error('invalidUpgradeResult');products[id]=1;}
- else {const burn=game.burnChance(job,players.craft);if(!Number.isFinite(burn)||burn<0||burn>1)throw Error('invalidResult');expectedCraftProduct(products,job,tier,burn);}
+ else {const burn=game.burnChance(job,players.bySkill[job.skill]);if(!Number.isFinite(burn)||burn<0||burn>1)throw Error('invalidResult');expectedCraftProduct(products,job,tier,burn);}
  return {...action,materials,cost,products,productValue:valueItems(products,prices,productPriceMode)};
 }

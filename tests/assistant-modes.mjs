@@ -28,7 +28,7 @@ await build({stdin:{contents:`
  `,resolveDir:process.cwd()},outfile:'.test-artifacts/assistant-modes/harness.js',bundle:true,format:'iife',target:'es2022',loader:{'.css':'text'},plugins:[{
  name:'count-calculation-calls',
  setup(build){
-  build.onLoad({filter:/\/src\/(workspace|engine\/collection-model|engine\/price-protocol)\.js$/},async({path})=>{
+  build.onLoad({filter:/[/\\]src[/\\](workspace|engine[/\\]collection-model|engine[/\\]price-protocol)\.js$/},async({path})=>{
    let contents=await fs.readFile(path,'utf8');
    for(const [entry,key]of [
     ['export function collectionPlayers(state){','players'],

@@ -14,6 +14,7 @@ import {installPanelGeometry} from './panel-geometry.js';
 import * as game from './engine/upstream.js';
 import {craftingJobs,craftingTiers,craftingSkills,craftingMaterials} from './engine/crafting-model.js';
 import {gatheringSkills} from './engine/gathering-model.js';
+import {effectiveSkillMasteries} from './engine/skill-masteries.js';
 import {collectionRows,gatheringCollectionRows,collectionPlayers,collectionDefaults,validateCollection,importCollection,collectionPrice} from './engine/collection-model.js';
 import {translatedName,translatedItemName} from './engine/i18n.js';
 import {createPriceSnapshot} from './engine/price-protocol.js';
@@ -22,6 +23,10 @@ import {add,defaults,validateWorkspace,userDefaults,validateUserWorkspace,applyU
 import {createStore} from './storage.js';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const skillNames={mining:'Mining',fishing:'Fishing',woodcutting:'Woodcutting',thieving:'Thieving',cooking:'Cooking',smithing:'Smithing',fletching:'Fletching',herblore:'Herblore',crafting:'Crafting'};
+function calculationConfig(config){
+ const {masteries,skillMasteries,...modifiers}=config;
+ return {...modifiers,skillMasteries:effectiveSkillMasteries(config)};
+}
 export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v1',initial=null,demo=false,gameIntegration=null,readCharacter=null,onVisibilityChange=()=>{},onPrefillFeedback=()=>{}}){
  // Measure the initial desktop layout without flashing an open panel.
  root.host.style.visibility='hidden';let mounting=true;
@@ -92,7 +97,7 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
  try{const saved=await store.load();if(saved)applyUserData(saved);}catch(e){storageError=message(e.message);}
  loaded=true;savedFilter=workspace.filters;restoreFilters();ensureOrder();
  function collectionCandidates(context){
-  const c=context.workspace.character;const key=JSON.stringify({initialized:c.initialized,config:c.config,counts:c.counts,rarityHot:hotKey(c),gathering:gathering()});if(collectionCache&&collectionCacheKey===key)return collectionCache;
+  const c=context.workspace.character;const key=JSON.stringify({initialized:c.initialized,config:calculationConfig(c.config),counts:c.counts,rarityHot:hotKey(c),gathering:gathering()});if(collectionCache&&collectionCacheKey===key)return collectionCache;
   const rows=collectionRows(c,context.players);collectionCache=(gathering()?gatheringCollectionRows(c,rows,context.players):rows).map(row=>({...row,job:craftingJobs.find(j=>j.id===row.jobId)??game.recipes.find(j=>j.id===row.jobId)}));collectionCacheKey=key;return collectionCache;
  }
  function candidates(all=false,context=calculationContext()){
@@ -139,7 +144,7 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
  function prefillSignature(request){
   // Capture intent and relevant observations, not sampling timestamps or ordinary clock ticks.
   const {initialized,counts,bank,pack,bankLocked,config,buyMode}=workspace.character;
-  return JSON.stringify({request,expandMetalBars:collecting()&&workspace.expandMetalBars,mode:workspace.selectedMode,orders:ordersForMode(workspace,filterKey()),initialized,counts,bank,pack,bankLocked,config,buyMode,hot:hotKey(workspace.character),prices:priceState()});
+  return JSON.stringify({request,expandMetalBars:collecting()&&workspace.expandMetalBars,mode:workspace.selectedMode,orders:ordersForMode(workspace,filterKey()),initialized,counts,bank,pack,bankLocked,config:calculationConfig(config),buyMode,hot:hotKey(workspace.character),prices:priceState()});
  }
  function gatherRequest(key,context){
   if(!gathering())throw Error('invalidPrefill');

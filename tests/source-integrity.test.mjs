@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {parse} from 'acorn';
@@ -16,7 +17,7 @@ test('reviewed game snapshot regenerates the engine and manifest deterministical
  try{
   await fs.mkdir(path.join(directory,'vendor'));await fs.mkdir(path.join(directory,'src/engine'),{recursive:true});
   await fs.writeFile(path.join(directory,'vendor/game-original.js'),source);
-  execFileSync(process.execPath,[new URL('scripts/extract.mjs',root).pathname],{cwd:directory});
+  execFileSync(process.execPath,[fileURLToPath(new URL('scripts/extract.mjs',root))],{cwd:directory});
   for(const name of ['src/engine/upstream.js','vendor/manifest.json'])assert.deepEqual(await fs.readFile(path.join(directory,name)),await fs.readFile(new URL(name,root)),name);
  }finally{await fs.rm(directory,{recursive:true,force:true});}
 });

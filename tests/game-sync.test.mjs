@@ -39,15 +39,45 @@ test('malformed world-window rows keep the known role and use the explicit world
  for(const row of [null,false,'invalid',[]]){const page=fixture(),out=[],sync=createGameSync(page,e=>out.push(e));sync.sample();page.deepvein.session.context.windows=[row];assert.throws(()=>readClient(page),/invalidWorldBuffs/);sync.sample();assert.equal(out.at(-1).role,'42');assert.equal(out.at(-1).status,'error');assert.equal(out.at(-1).error,'invalidWorldBuffs');assert.equal(out.at(-1).snapshot,null);sync.dispose();}
 });
 
-test('switching mastery pages emits only the newly active ranks',()=>{
+test('sync observes bound page edits and active page swaps while ignoring unrelated ranks',()=>{
  const page=fixture(),player=page.deepvein.session.state,out=[];
- Object.assign(player,{masteryPage:1,masteries:{craft:10},masteryOther:{gather:20}});
+ Object.assign(player,{masteryPage:1,masteries:{craft:10},masterySkills:{mining:2},masteryAway:{2:{gather:20}}});
  const sync=createGameSync(page,value=>out.push(value),{now:()=>10000});
  sync.sample();
- [player.masteries,player.masteryOther]=[player.masteryOther,player.masteries];
+ player.masteryAway[2].gather=30;
+ sync.sample();
+ player.masteryAway[2].xp=50;
+ sync.sample();
+ assert.equal(out.length,2);
+ player.masteryAway={1:player.masteries};
+ player.masteries={gather:30};
  player.masteryPage=2;
  sync.sample();
- assert.deepEqual(out.map(event=>event.snapshot.player.masteries),[{craft:10},{gather:20}]);
- assert.equal(Object.hasOwn(out[1].snapshot.player,'masteryOther'),false);
+ assert.deepEqual(out.map(event=>event.snapshot.player.masteries),[{craft:10},{craft:10},{gather:30}]);
+ assert.deepEqual(out.map(event=>event.snapshot.player.masteryAway),[{2:{gather:20}},{2:{gather:30}},{1:{craft:10}}]);
+ sync.dispose();
+});
+
+test('partial mastery pages retain the role, fall back only to its server snapshot and recover',()=>{
+ const page=fixture(),player=page.deepvein.session.state,out=[];
+ const server=readClient(page).snapshot;
+ const sync=createGameSync(page,event=>out.push(event));
+ Object.assign(player,{masteryPage:1,masteryAway:{2:{craft:106}}});
+ sync.sample();
+ assert.equal(out.at(-1).status,'error');
+ assert.equal(out.at(-1).role,'42');
+ assert.equal(out.at(-1).error,'incompleteSnapshot');
+ sync.receive({role:'42',status:'live',snapshot:server});
+ assert.equal(out.at(-1).source,'server');
+ assert.deepEqual(out.at(-1).snapshot,server);
+ assert.equal(out.at(-1).realtimeError,'incompleteSnapshot');
+ player.id=43;
+ sync.sample();
+ assert.equal(out.at(-1).role,'43');
+ assert.equal(out.at(-1).snapshot,null);
+ player.masterySkills={smithing:2};
+ sync.sample();
+ assert.equal(out.at(-1).source,'client');
+ assert.equal(out.at(-1).status,'live');
  sync.dispose();
 });

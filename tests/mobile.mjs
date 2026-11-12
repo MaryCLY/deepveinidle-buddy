@@ -1,3 +1,4 @@
+import {checkMasteryDrafts} from './mastery-drafts.mjs';
 import {longPressTitle,launchBrowser,baseUrl} from './browser-helper.mjs';
 import assert from 'node:assert/strict';import fs from 'node:fs/promises';
 import {build} from 'esbuild';
@@ -40,7 +41,10 @@ try{
  }
  assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('dvi-buddy-demo-v1')).orders),ordersBeforeNavigation);checks.push('trusted mobile tab taps close the assistant only after native navigation; returning stays closed and reopening preserves orders, input, nodes and scroll');
  await root.locator('#search').fill('');await root.locator('#search').press('Tab');
- await page.evaluate(()=>{const button=document.querySelector('[data-m-tab="play"]');window.__playClick=button.onclick;button.onclick=()=>{};});await page.locator('[data-m-tab="play"]').tap();assert.equal(await root.isVisible(),true);await page.evaluate(()=>document.querySelector('[data-m-tab="play"]').onclick=window.__playClick);
+ await page.evaluate(()=>{const button=document.querySelector('[data-m-tab="play"]');window.__playClick=button.onclick;button.onclick=()=>{};});await page.locator('[data-m-tab="play"]').tap();
+ // Let the native click guard check this failed navigation before simulating another click.
+ await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,0)));
+ assert.equal(await root.isVisible(),true);await page.evaluate(()=>document.querySelector('[data-m-tab="play"]').onclick=window.__playClick);
  await page.evaluate(()=>document.querySelector('[data-m-tab="play"]').click());assert.equal(await root.isVisible(),true);await page.evaluate(()=>document.querySelector('[data-m-tab="play"]').click());assert.equal(await root.isVisible(),true);
  checks.push('failed native navigation and programmatic tab clicks leave the mobile assistant open');
  // Native market/bank windows can mark the root tab while the shell stays on world.
@@ -108,5 +112,7 @@ try{
  assert.equal(await page.evaluate(()=>document.documentElement.dataset.mtab),'market');assert.equal(await page.evaluate(()=>document.querySelector('.m-shell').dataset.mtab),'play');
  await page.evaluate(()=>window.__panel.open());await r.locator('[data-action="prefill-action"]').tap();await r.waitFor({state:'hidden'});
  assert.equal(await page.evaluate(()=>document.documentElement.dataset.mtab),'play');assert.equal(await page.locator('[data-market-window]').isVisible(),false);assert.equal(await page.evaluate(()=>window.__routes.amount),100);assert.equal(await page.evaluate(()=>window.__mobileTabClicks.at(-1)),'play');assert.deepEqual(await page.evaluate(()=>window.__commands),[]);checks.push('action prefill leaves a market overlay even when its underlying mobile container still says play');
+ await checkMasteryDrafts(page,{jobId:bronze.id,mobile:true});
+ checks.push('execution rejects changed skill masteries and permits equivalent bindings, while purchase keeps the same item request');
  assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:checks.length,checks,errors},null,2));
 }catch(error){await page?.screenshot({path:'.test-artifacts/mobile/failure.png'});console.error(JSON.stringify({checks,errors,error:error.stack},null,2));throw error;}finally{await browser.close();}
