@@ -8,14 +8,14 @@ import {copyCharacter} from '../src/capture.js';
 import {playerFixture} from './fixtures/player.js';
 
 const snapshot=player=>({version:2,capturedAt:Date.now(),player,worldTick:player.lastTick,worldBuffs:[],worldBuffsVersion:1});
-test('all ten level-105 tool upgrades preserve rarity, reset enhancement and require boss materials',()=>{
- const upgrades=craftingJobs.filter(job=>job.upgrade?.startsAtZero);
+test('all ten level-105 tool upgrades preserve rarity and enhancement and require boss materials',()=>{
+ const upgrades=craftingJobs.filter(job=>job.upgrade&&job.levelReq===105);
  assert.deepEqual(upgrades.map(job=>job.upgrade.to[0]),[698,699,572,573,575,576,711,712,718,719]);
  for(const job of upgrades){
   assert.equal(job.levelReq,105);assert.equal(game.tool(job.output.itemId).bonus,.65);
   for(let tier=0;tier<5;tier++){
    const from=game.withRarity(job.upgrade.from[0],tier),to=game.withRarity(job.output.itemId,tier);
-   assert.equal(game.upgradeResult(job.upgrade,game.encode(from,20)),to);
+   for(const plus of [0,1,10,20])assert.equal(game.upgradeResult(job.upgrade,game.encode(from,plus)),game.encode(to,plus));
    assert.deepEqual(craftingMaterials(job,tier,2),{[from]:2,[job.upgrade.extra[0].itemId]:2});
    assert.ok(game.item(to));assert.equal(game.recipeLevel(job.output.itemId),85);
    assert.equal(game.marketFamily(job.output.itemId),'tools');

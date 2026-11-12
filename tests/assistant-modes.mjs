@@ -60,12 +60,13 @@ try{
  assert.deepEqual(await root.locator('.content > section').evaluateAll(els=>els.map(e=>e.id)),['global-settings','recipes','procurement','execution-plan']);
  assert.equal(await root.locator('[data-pricing="material"]').count(),1);assert.equal(await root.locator('[data-pricing="product"]').count(),1);assert.equal(await root.locator('#orders').count(),0);
  assert.equal(await root.locator('[data-material="1"] td').nth(3).textContent(),'91 / 0 / 0');
- const row=root.locator('[data-execution-action="collection:40"]');assert.equal(await row.locator('td').nth(3).textContent(),'91');assert.match(await row.textContent(),/9 → 100/);
- assert.deepEqual(await row.locator('td.actions button').allTextContents(),['+','−','×','执行']);
+ const row=root.locator('[data-execution-action="collection:40"]');assert.equal(await row.locator('td').nth(3).textContent(),'91');assert.equal(await row.locator('td').count(),6);
+ assert.deepEqual((await root.locator('#execution-actions th').allTextContents()).map(s=>s.replace(/[▲▼]/g,'')),['物品','稀有度','技能','执行次数','预计时间','操作']);
+ assert.deepEqual(await row.locator('td.actions button').allTextContents(),['执行','+','−','×']);
  assert.equal(await row.getByRole('button',{name:'移除',exact:true}).textContent(),'×');
  const autoHeader=await root.locator('#auto-remove').evaluate(input=>{const heading=input.closest('.execution-heading'),title=heading?.querySelector('h2').getBoundingClientRect(),label=input.parentElement.getBoundingClientRect(),clear=heading?.querySelector('[data-action="clear-collection-plan"]').getBoundingClientRect(),bounds=heading?.getBoundingClientRect();return !!heading&&Math.abs(title.top-label.top)<2&&label.right<=clear.left&&Math.abs(clear.right-bounds.right)<=2;});assert.ok(autoHeader,JSON.stringify(await root.locator('.execution-heading > *').evaluateAll(els=>els.map(e=>({tag:e.tagName,text:e.textContent,rect:e.getBoundingClientRect().toJSON()})))));
  checks.push('collection manufacturing shows three sections, both global pricing controls and isolated fixed-order demand');
- await row.locator('[data-action="target-up"]').click();assert.match(await row.textContent(),/9 → 1,000/);assert.equal(await row.locator('td').nth(3).textContent(),'991');
+ await row.locator('[data-action="target-up"]').click();assert.equal(await page.evaluate(()=>window.panel.getWorkspace().collectionOrder.lines[0].target),1000);assert.equal(await row.locator('td').nth(3).textContent(),'991');
  await row.locator('[data-action="target-down"]').click();assert.equal(await row.locator('td').nth(3).textContent(),'91');
  await root.locator('#search').fill('no-matching-recipe');await root.locator('#search').press('Tab');await root.locator('[data-action="add-collection"]').first().waitFor({state:'detached'});assert.equal(await root.locator('[data-action="add-collection"]').count(),0);assert.equal(await row.count(),1);
  checks.push('target edits use collection thresholds and update procurement even when candidates are filtered out');
@@ -159,7 +160,7 @@ try{
  await select('craft');assert.equal(await root.locator('[data-action="clear-collection-plan"]').count(),0);
  checks.push('clear collection plans confirms, includes filtered targets, saves the empty plan and preserves manufacturing orders and settings');
  await mount(raw);await root.locator('.titlebar h1').click({button:'right'});await root.getByRole('menuitemcheckbox').click();assert.equal(await row.locator('[data-action="target-up"]').count(),1);assert.equal(await row.locator('[data-action="prefill-action"]').count(),1);
- await row.locator('[data-action="target-down"]').click();assert.match(await row.textContent(),/9 → 10/);await row.locator('[data-action="target-down"]').click();assert.equal(await row.locator('[data-action="target-down"]').isDisabled(),true);
+ await row.locator('[data-action="target-down"]').click();assert.equal(await page.evaluate(()=>window.panel.getWorkspace().collectionOrder.lines[0].target),10);await row.locator('[data-action="target-down"]').click();assert.equal(await row.locator('[data-action="target-down"]').isDisabled(),true);
  await select('collection-gather');assert.equal(await root.locator('[data-action="prefill-gather"]').count()>0,true);assert.equal(await root.locator('#recipe-candidates th').count(),6);
  checks.push('turning debug off preserves craft and gathering prefill controls and target operations');
  const bars=structuredClone(raw);
@@ -235,7 +236,7 @@ try{
  assert.equal(await root.locator('[data-material="180"] td').nth(2).textContent(),'3');
  checks.push('intermediate toggle expands only gem shortages into cutting actions and uncut gems, and restores direct gem purchases when off');
  await mount(savedBars);
- await select('collection-craft');await toggleGameLanguage(page);assert.ok((await root.locator('#execution-actions').textContent()).includes('Current → target'));await page.setViewportSize({width:390,height:844});await page.evaluate(async()=>{const {installMobileFixture}=await import('/tests/mobile-fixture.js');installMobileFixture();});await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').hasAttribute('data-mobile'));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await select('collection-craft');await toggleGameLanguage(page);assert.deepEqual((await root.locator('#execution-actions th').allTextContents()).map(s=>s.replace(/[▲▼]/g,'')),['Item','Rarity','Skill','Attempts','Expected time','Actions']);assert.deepEqual(await root.locator('#execution-actions tbody tr').last().locator('td.actions button').allTextContents(),['Execute','+','−','×']);await page.setViewportSize({width:390,height:844});await page.evaluate(async()=>{const {installMobileFixture}=await import('/tests/mobile-fixture.js');installMobileFixture();});await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').hasAttribute('data-mobile'));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await root.locator('#execution-actions').screenshot({path:'.test-artifacts/assistant-modes/mobile-execution.png'});await page.screenshot({path:'.test-artifacts/assistant-modes/mobile.png'});
  checks.push('translated editable plans fit the mobile layout with internal horizontal scrolling');
  const legacy=structuredClone(raw);legacy.selectedMode='collectionGather';legacy.filters.collectionGather.tier='4';legacy.filters.collectionGather.sort='rarity';legacy.filters.collectionGather.sortDirection='desc';
