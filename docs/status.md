@@ -1,19 +1,23 @@
 # 当前状态
 
-版本：**0.5.6**。计算基线：**1.0.1214**（对应 `package.json` 与 `vendor/manifest.json`）。线上发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准，历史变更见[更新说明](../CHANGELOG.md)。
+版本：**0.5.7**。计算基线：**1.0.1214**（对应 `package.json` 与 `vendor/manifest.json`）。线上发布记录以[GitHub Releases](https://github.com/yukixz/deepveinidle-buddy/releases)与[Greasy Fork](https://greasyfork.org/zh-CN/scripts/601896-deepveinidle-buddy)为准，历史变更见[更新说明](../CHANGELOG.md)。
 
 功能与计算规则统一见[面板规则](panel.md)，模块和上游来源见[技术方案](technical.md)。工作区存档保持 `version=2`，新增字段的兼容与降级限制见[存储与恢复](panel.md#存储与恢复)。
 
-## 待发布变更
+## 当前版本变更
 
 - 计算基线更新至游戏 1.0.1214，更新公开资源、来源摘要和符号映射并重新生成上游模块；105 级工具升级保留强化等级。
 - 收藏（制造）执行计划移除额外的“当前→目标”列，已完成提示保留在物品列，目标调整与移除操作保留。
 - 执行计划操作列将“执行”放在所有按钮首位，收藏操作依次为执行、＋、−、×。
-- 用户存档格式保持 `version=2`，本轮未发布。
+- 收藏（制造）纳入 27 个装备／工具升级配方（95 级 3 个、99 级 14 个、105 级 10 个），复用制造材料与固定耗时，支持目标调整、采购汇总与计划保存；升级执行预填仍不支持。
+- 制造与收藏（制造）共用完整制造配方来源，避免两处分别维护配方范围。
+- 用户存档格式保持 `version=2`，升级收藏来源使用既有 `upgrade-<ID>` 字符串；旧版不能读取新增的升级收藏条目。
 
 ## 验证与边界
 
-本轮已通过 211 项单元测试、构建及 `git diff --check`。隔离浏览器运行 `assistant-modes`、`execution-summary`、`execution-borders`、`game-integration`、`mobile-tables` 五个场景，共 79 项检查通过，覆盖双语六列表头、执行按钮首位、目标调整与移除、完成项提示、配套制造、移动端横向滚动及只读接入／草稿预填。上游来源摘要与确定性再生成已由单元测试核验，工具升级覆盖全部 10 种工具、5 种品质及 +0／+1／+10／+20。
+新增验证覆盖 27 个升级配方、全部 5 种品质、收藏缺口与精通点、同品质材料及原始固定耗时、等级不足／完成状态、库存与在售数量筛选、采购抵扣、升级来源 ID 的严格校验及 version=2 存档回读。浏览器场景覆盖升级收藏的等级与库存筛选、同品质采购、目标编辑、保存恢复、完成项移除及禁用升级预填。
+
+本轮发布门禁通过统一入口执行，单元、构建、完整浏览器及线上核验的实际结果由发布任务摘要记录。
 
 发布门禁与日常入口见[构建与发布](releasing.md#日常入口)。本地结果路径：
 

@@ -1,12 +1,12 @@
 import {requireKeys} from './record-shape.js';
 import {validateInventoryMap as validateBank,validateInventoryLocks,readInventoryParts} from './character-inventory.js';
 import * as game from './upstream.js';
-import {craftingDefaults,craftingPlayer,normalizeCrafting,importCrafting,craftingSkills} from './crafting-model.js';
+import {craftingDefaults,craftingPlayer,normalizeCrafting,importCrafting,craftingJobs,craftingMaterials} from './crafting-model.js';
 import {gatheringDefaults,gatheringPlayer,normalizeGathering,importGathering,gatheringSkills} from './gathering-model.js';
 import {workQualities} from './work-expectation.js';
 import {readWorldBuffs} from './world-buffs.js';
 
-const collectionSkills=[...gatheringSkills,...craftingSkills];
+const collectionJobs=[...game.recipes.filter(job=>gatheringSkills.includes(job.skill)),...craftingJobs];
 export const collectionIds=[...game.collectionItems].sort((a,b)=>a-b).flatMap(base=>Array.from({length:game.itemSupportsRarity(base)?5:1},(_,tier)=>game.withRarity(base,tier)));
 const idSet=new Set(collectionIds),record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const configGroups=['levels','gear','brews','house','masteries','perks'];
@@ -81,7 +81,7 @@ export function pointsForProduction(id,current,quantity){return game.collectionP
 export function collectionRoutes(id){
  const base=game.baseItemId(id);
  if(game.collectionExcluded(id))return [];
- return game.recipes.filter(j=>j.output.itemId===base&&!j.retired&&(!j.plain||game.itemTier(id)===0)&&collectionSkills.includes(j.skill));
+ return collectionJobs.filter(j=>j.output.itemId===base&&!j.retired&&(!j.plain||game.itemTier(id)===0));
 }
 export function collectionPrice(id,prices,buyMode='ask'){
  const item=prices.getItem(id);
@@ -101,6 +101,13 @@ export function estimateCollection(state,id,job,players=collectionPlayers(state)
  if(target.complete)return {...base,status:'complete'};
  const gathering=gatheringSkills.includes(job.skill),kind=gathering?'gather':'craft',p=players[kind];
  if(game.level(p.skills[job.skill])<job.levelReq)return {...base,status:'levelTooLow'};
+ if(job.upgrade){
+  const attempts=Math.ceil(target.missing/job.output.qty),quantity=attempts*job.output.qty;
+  const actionSeconds=game.upgradeTicks(p,job.upgrade)*game.tickMs/1000,seconds=attempts*actionSeconds;
+  if(!Number.isSafeInteger(attempts)||attempts<=0||!Number.isSafeInteger(quantity)||!Number.isFinite(seconds)||seconds<0||seconds>Number.MAX_SAFE_INTEGER)throw Error('quantityOverflow');
+  const points=pointsForProduction(id,target.current,quantity),materials=craftingMaterials(job,game.itemTier(id),attempts);
+  return {...base,status:'ok',seconds,secondsPerPoint:seconds/points,points,quantity,attempts,materials,burn:0,caught:0,quality:1,actionSeconds};
+ }
  if(!game.world.sites.some(s=>s.jobIds.includes(job.id)))return {...base,status:'noSites'};
  const tier=game.itemTier(id),chance=game.workChance(job,p),burn=game.burnChance(job,p),caught=game.caughtChance(job,p);
  const qualities=gathering&&game.itemSupportsRarity(job.output.itemId)?workQualities(p,job,players.tick,players.worldRarity):[1];

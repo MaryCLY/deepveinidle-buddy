@@ -163,9 +163,9 @@ export function estimateOrders(workspace,prices,players=collectionPlayers(worksp
       const attempts=Math.ceil(entry.attempts);
       if(!quantity(attempts)||attempts<=0)throw Error('quantityOverflow');
       const seconds=attempts===entry.attempts?entry.seconds:add(0,entry.seconds/entry.attempts*attempts);
-      const inputs=game.recipeInputs(job,game.itemTier(line.itemId));
+      const tier=game.itemTier(line.itemId);
       entry={...entry,attempts,seconds,secondsPerPoint:seconds/entry.points,
-       materials:Object.fromEntries(inputs.map(input=>[input.itemId,add(0,input.qty*attempts)])),
+       materials:job.upgrade?craftingMaterials(job,tier,attempts):Object.fromEntries(game.recipeInputs(job,tier).map(input=>[input.itemId,add(0,input.qty*attempts)])),
       };
      }
     }

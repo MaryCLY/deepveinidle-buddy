@@ -93,7 +93,7 @@ export async function mountPanel(root,{platform,css,storageKey='dvi-buddy-demo-v
  loaded=true;savedFilter=workspace.filters;restoreFilters();ensureOrder();
  function collectionCandidates(context){
   const c=context.workspace.character;const key=JSON.stringify({initialized:c.initialized,config:c.config,counts:c.counts,rarityHot:hotKey(c),gathering:gathering()});if(collectionCache&&collectionCacheKey===key)return collectionCache;
-  const rows=collectionRows(c,context.players);collectionCache=(gathering()?gatheringCollectionRows(c,rows,context.players):rows).map(row=>({...row,job:game.recipes.find(j=>j.id===row.jobId)}));collectionCacheKey=key;return collectionCache;
+  const rows=collectionRows(c,context.players);collectionCache=(gathering()?gatheringCollectionRows(c,rows,context.players):rows).map(row=>({...row,job:craftingJobs.find(j=>j.id===row.jobId)??game.recipes.find(j=>j.id===row.jobId)}));collectionCacheKey=key;return collectionCache;
  }
  function candidates(all=false,context=calculationContext()){
   const {workspace:state,prices:ps,players}=context,s=state.character;
