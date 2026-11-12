@@ -9,16 +9,19 @@ await fs.mkdir('.test-artifacts/assistant-modes',{recursive:true});
 await build({stdin:{contents:`
  import {collectionRows,gatheringCollectionRows} from './src/engine/collection-model.js';
  import {mountPanel} from './src/app.js';import css from './src/theme.css';import {createGamePrefill} from './src/game-prefill.js';
- window.mountModes=async(raw,snapshot)=>{
+ import {defaults} from './src/workspace.js';
+ window.mountModes=async(raw,snapshot,asks)=>{
   window.panel?.dispose();document.querySelector('#deepveinidle-buddy')?.remove();window.raw=raw;window.writes=[];window.hints=[];window.sequence=0;
   window.deepvein={session:{state:{id:42}},routes:()=>window.__routes,panels:{show:name=>window.__ui.push(['panel',name])}};
   const host=document.createElement('div');host.id='deepveinidle-buddy';document.body.append(host);
   const integration=createGamePrefill(window,{wait:ms=>window.__wait?window.__wait(ms):new Promise(resolve=>setTimeout(resolve,ms))});
-  window.panel=await mountPanel(host.attachShadow({mode:'open'}),{css,storageKey:'modes-test',platform:{
+  const initial=defaults();
+  for(const [id,value] of Object.entries(asks))initial.prices.quotes[id]={ask:{value,capturedAt:Date.now()}};
+  window.panel=await mountPanel(host.attachShadow({mode:'open'}),{css,initial,storageKey:'modes-test',platform:{
    get:async(key,fallback)=>key==='modes-test'?structuredClone(window.raw):key.startsWith('dvi-buddy-debug')?true:fallback,
    set:async(key,value)=>{if(key==='modes-test'){window.raw=structuredClone(value);window.writes.push(value);}},
    market:async()=>{throw Error('fixture-market');}
-  },gameIntegration:{...integration,action:(request,guard)=>{window.pendingGuard=guard;return integration.action(request,guard);}},onPrefillFeedback:value=>window.hints.push(value)});
+  },gameIntegration:{...integration,purchase:(request,guard)=>{window.purchaseGuard=guard;return integration.purchase(request,guard);},action:(request,guard)=>{window.pendingGuard=guard;return integration.action(request,guard);}},onPrefillFeedback:value=>window.hints.push(value)});
   window.gatherAttempts=key=>collectionRows(window.panel.getWorkspace().character).find(row=>[row.id,row.jobId,row.target].join(':')===key).attempts;
   window.gatherSchemes=()=>gatheringCollectionRows(window.panel.getWorkspace().character);
   window.expectedGather=key=>Math.ceil(window.gatherAttempts(key));
@@ -33,7 +36,7 @@ await build({stdin:{contents:`
    for(const [entry,key]of [
     ['export function collectionPlayers(state){','players'],
     ['export function createPriceSnapshot(state){','prices'],
-    ['export function estimateOrders(workspace,prices,players=collectionPlayers(workspace.character)){','plans'],
+    ['export function estimateOrders(workspace,prices,players=collectionPlayers(workspace.character),pricing){','plans'],
    ])contents=contents.replace(entry,entry+`window.__calculationCalls??={};window.__calculationCalls.${key}=(window.__calculationCalls.${key}??0)+1;`);
    return {contents,loader:'js'};
   });
@@ -45,7 +48,7 @@ try{
  await page.goto(baseUrl+'/tests/game-integration-fixture.html');await page.addScriptTag({url:baseUrl+'/.test-artifacts/assistant-modes/harness.js'});
  const root=page.locator('#deepveinidle-buddy'),select=async mode=>{await root.locator(`[data-action="mode-${mode}"]`).click();await root.locator(`[data-action="mode-${mode}"][aria-pressed="true"]`).waitFor();};
  const raw=userDefaults();raw.selectedMode='collection';raw.orders[0].lines=[{kind:'craft',jobId:41,tier:0,count:10000}];raw.collectionOrder.lines=[{kind:'collection',itemId:40,jobId:41,target:100}];
- const mount=async value=>page.evaluate(({raw,snapshot})=>window.mountModes(raw,snapshot),{raw:value,snapshot:gameSnapshot()});
+ const mount=async (value,asks={})=>page.evaluate(({raw,snapshot,asks})=>window.mountModes(raw,snapshot,asks),{raw:value,snapshot:gameSnapshot(),asks});
  await mount({...raw,selectedMode:'craft'});
  const renderCalls=await page.evaluate(()=>{
   const before={...window.__calculationCalls};
@@ -167,13 +170,32 @@ try{
  const bars=structuredClone(raw);
  bars.orders[0].lines=[{kind:'craft',jobId:51,tier:0,count:2}];
  bars.collectionOrder.lines=[{kind:'collection',itemId:80,jobId:51,target:100}];
- await mount(bars);
+ bars.filters.collection={...bars.filters.collection,tier:'0',query:'Bronze pickaxe'};
+ const barAsks={1:2,2:3,40:10};
+ await mount(bars,barAsks);
  const barToggle=root.locator('#global-settings #expand-metal-bars');
  assert.equal(await barToggle.isChecked(),false);
  assert.equal(await root.locator('[data-material="40"]').count(),1);
+ const candidateCost=root.locator('[data-view-key="collection:80:51:1"] td').nth(5);
+ assert.equal(await candidateCost.textContent(),'20.00');
  await barToggle.check();
  await page.waitForFunction(()=>window.raw.expandMetalBars===true);
  const smelt=root.locator('[data-execution-action^="bar:"]');
+ await smelt.waitFor();
+ assert.equal(await candidateCost.textContent(),'10.00');
+ const barMaterials=root.locator('[data-material="40"]'),directBuy=barMaterials.getByRole('button',{name:'购买'});
+ assert.equal(await barMaterials.locator('small.route-label').textContent(),'自制');
+ assert.equal(await directBuy.evaluate(el=>getComputedStyle(el).opacity),'1');
+ assert.equal(await directBuy.evaluate(el=>el.matches('.self-buy:enabled')),true);
+ assert.equal(await barMaterials.locator('small.route-label').evaluate(el=>getComputedStyle(el).color),'rgb(187, 167, 132)');
+ await page.evaluate(()=>{document.querySelector('[data-market-list] [data-item="1"]').dataset.item='40';});
+ await directBuy.click();
+ await page.waitForFunction(()=>document.querySelector('[data-trade-qty-in]').value==='200'&&document.querySelector('[data-trade-price-in]').value==='10');
+ await page.evaluate(()=>{document.querySelector('[data-trade-close]').click();document.querySelector('[data-market-window]').hidden=true;});
+ assert.equal(await page.evaluate(()=>window.purchaseGuard()),true);
+ await page.evaluate(snapshot=>window.sendSnapshot(snapshot),gameSnapshot({bankLocked:[40]}));
+ assert.equal(await page.evaluate(()=>window.purchaseGuard()),false);
+ await page.evaluate(snapshot=>window.sendSnapshot(snapshot),gameSnapshot());
  await smelt.waitFor();
  assert.match(await smelt.textContent(),/配套制造/);
  assert.equal(await smelt.locator('[data-action="target-up"]').count(),0);
@@ -182,7 +204,7 @@ try{
  assert.equal(await root.locator('[data-material="1"]').count(),1);
  const mergedBars=await page.evaluate(()=>structuredClone(window.raw));
  mergedBars.collectionOrder.lines.push({kind:'collection',itemId:360,jobId:308,target:100});
- await mount(mergedBars);
+ await mount(mergedBars,barAsks);
  assert.equal(await smelt.count(),1);
  assert.equal(await smelt.locator('td').nth(3).textContent(),'300');
  assert.equal(await smelt.locator('[data-action="target-up"]').count(),0);
@@ -212,7 +234,12 @@ try{
  assert.equal(await root.locator('[data-material="1"]').count(),0);
  await select('collection-gather');
  assert.equal(await barToggle.count(),0);
- await mount(savedBars);
+ await mount(savedBars,{...barAsks,40:5});
+ assert.equal(await barMaterials.locator('small.route-label').count(),0);
+ assert.equal(await barMaterials.locator('td').nth(2).textContent(),'200');
+ assert.equal(await directBuy.evaluate(el=>el.matches('.self-buy')),false);
+ assert.equal(await smelt.count(),0);
+ await mount(savedBars,barAsks);
  assert.equal(await barToggle.isChecked(),true);
  await barToggle.uncheck();
  await page.waitForFunction(()=>!Object.hasOwn(window.raw,'expandMetalBars'));
@@ -221,8 +248,8 @@ try{
  checks.push('metal bar expansion is scoped to the top collection setting, roundtrips and derives actions without changing orders');
  const gems=structuredClone(raw);gems.expandMetalBars=true;
  gems.collectionOrder.lines=[{kind:'collection',itemId:181,jobId:231,target:100}];
- await mount(gems);
- assert.match(await barToggle.locator('..').textContent(),/展开半成品/);
+ await mount(gems,{180:10,100:2,4:5});
+ assert.match(await barToggle.locator('..').textContent(),/考虑自制半成品/);
  await page.evaluate(snapshot=>window.sendSnapshot(snapshot),gameSnapshot({collections:{181:95},bank:{180:2,100:3,4:5}}));
  const cutting=root.locator('[data-execution-action="bar:230:0"]');
  await cutting.waitFor();
@@ -236,8 +263,11 @@ try{
  assert.equal(await root.locator('[data-material="100"]').count(),0);
  assert.equal(await root.locator('[data-material="180"] td').nth(2).textContent(),'3');
  checks.push('intermediate toggle expands only gem shortages into cutting actions and uncut gems, and restores direct gem purchases when off');
- await mount(savedBars);
+ await mount(savedBars,barAsks);
  await select('collection-craft');await toggleGameLanguage(page);assert.deepEqual((await root.locator('#execution-actions th').allTextContents()).map(s=>s.replace(/[▲▼]/g,'')),['Item','Rarity','Skill','Attempts','Expected time','Actions']);assert.deepEqual(await root.locator('#execution-actions tbody tr').last().locator('td.actions button').allTextContents(),['Execute','+','−','×']);await page.setViewportSize({width:390,height:844});await page.evaluate(async()=>{const {installMobileFixture}=await import('/tests/mobile-fixture.js');installMobileFixture();});await page.waitForFunction(()=>document.querySelector('#deepveinidle-buddy').hasAttribute('data-mobile'));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ const mobileLabel=barMaterials.locator('.self-crafted-name');
+ assert.equal(await mobileLabel.locator('.route-label').textContent(),'Craft');
+ assert.ok(await mobileLabel.evaluate(label=>label.lastElementChild.getBoundingClientRect().left>=label.firstElementChild.getBoundingClientRect().right));
  await root.locator('#execution-actions').screenshot({path:'.test-artifacts/assistant-modes/mobile-execution.png'});await page.screenshot({path:'.test-artifacts/assistant-modes/mobile.png'});
  checks.push('translated editable plans fit the mobile layout with internal horizontal scrolling');
  await toggleGameLanguage(page);

@@ -49,7 +49,8 @@ test('collection plan prices and times a bronze rod and its bronze bar using eac
  workspace.orders=[workspace.collectionOrder];
  workspace.collectionOrder.fees.minute=60;
  putLine(workspace.collectionOrder,{kind:'collection',itemId:85,jobId:56,target:1});
- const plan=estimateOrders(workspace,prices);
+ const pricedBar=createPriceSnapshot({quotes:{1:{ask:{value:2}},2:{ask:{value:3}},40:{ask:{value:10}}}});
+ const plan=estimateOrders(workspace,pricedBar);
  const rod=estimateCollection(character(current),85,job(56),undefined,1);
  const bar=estimateCraftRecipe(character(other),job(41),0,prices);
  assert.equal(plan.entries[0].seconds,rod.seconds);

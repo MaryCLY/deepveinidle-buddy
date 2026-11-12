@@ -16,3 +16,14 @@ test('effective prices, preferences, invalid quantities and obsolete state versi
  for(const value of [{version:4,prices:{},quotes:{},preferences:{}},{...priceDefaults(),prices:{}},{...priceDefaults(),preferences:{}}])assert.throws(()=>normalizePriceState(value));
  const old=priceDefaults();assert.throws(()=>mergeMarketSnapshot(old,{version:1,invalid:0,quotes:{1:{ask:{value:1,quantity:-1,capturedAt:Date.now()}}}}));assert.deepEqual(old,priceDefaults());
 });
+test('explicit zero quotes survive ingestion while missing and invalid sides stay unknown',()=>{
+ const raw={game:'Deep Vein Idle',generatedAt:new Date().toISOString(),refreshSeconds:300,items:{
+  40:{lowestSell:0,highestBuy:null,sellQty:1,buyQty:0},
+  1:{lowestSell:-1,highestBuy:0,sellQty:0,buyQty:1},
+ }};
+ const prices=createPriceSnapshot(mergeMarketSnapshot(priceDefaults(),parseMarketPrices(raw)));
+ assert.equal(prices.getItem(40).sellPrice,0);
+ assert.equal(prices.getItem(40).buyPrice,null);
+ assert.equal(prices.getItem(1).sellPrice,null);
+ assert.equal(prices.getItem(1).buyPrice,0);
+});

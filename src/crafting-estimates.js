@@ -1,8 +1,8 @@
 import * as game from './engine/upstream.js';
-import {craftingJobs,craftingMaterials} from './engine/crafting-model.js';
+import {craftingMaterials} from './engine/crafting-model.js';
 import {collectionPlayers,collectionPrice} from './engine/collection-model.js';
 import {expectedCraftProduct} from './engine/work-expectation.js';
-import {expandBarMaterials} from './metal-bars.js';
+import {expandBarMaterials,intermediateJob} from './metal-bars.js';
 const checked=value=>{if(!Number.isFinite(value)||value<0||value>Number.MAX_SAFE_INTEGER)throw Error('quantityOverflow');return value;};
 export function estimateCraftAction(state,job,count,players=collectionPlayers(state)){
  if(!Number.isSafeInteger(count)||count<=0)throw Error('invalidQuantity');
@@ -23,14 +23,25 @@ function valueItems(items,prices,side){
  }
  return missing?null:total;
 }
-export function estimateBarSteps(state,materials,players,availableBars){
- const expanded=expandBarMaterials(materials,availableBars);
- const steps=expanded.steps.map(step=>{
-  if(step.count===null)return {...step,status:'unknownInventory',seconds:null};
-  if(state.bankLocked.includes(step.outputItemId))return {...step,status:'materialLocked',seconds:null};
-  const job=craftingJobs.find(job=>job.id===step.jobId);
-  return {...step,...estimateCraftAction(state,job,step.count,players)};
- });
+export function createIntermediatePricing(state,prices,players=collectionPlayers(state)){
+ const cache=new Map();
+ return {get(itemId){
+  if(cache.has(itemId))return cache.get(itemId);
+  const job=intermediateJob(itemId);
+  if(!job)return null;
+  const buyPrice=collectionPrice(itemId,prices,state.buyMode).price;
+  const tier=game.itemTier(itemId);
+  const unitSeconds=state.bankLocked.includes(itemId)?null:estimateCraftAction(state,job,1,players).seconds;
+  const craftPrice=unitSeconds!==null?valueItems(craftingMaterials(job,tier,1),prices,state.buyMode):null;
+  const craft=craftPrice!==null&&(buyPrice===null||craftPrice<buyPrice);
+  const route={price:craft?craftPrice:buyPrice,craft,strictlyCheaper:craft&&buyPrice!==null,unitSeconds};
+  cache.set(itemId,route);
+  return route;
+ }};
+}
+export function estimateBarSteps(materials,availableBars,pricing){
+ const expanded=expandBarMaterials(materials,availableBars,pricing);
+ const steps=expanded.steps.map(step=>({...step,status:'ok',seconds:checked(pricing.get(step.outputItemId).unitSeconds*step.count)}));
  return {...expanded,steps};
 }
 export function withBarTime(action,steps){
